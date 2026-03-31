@@ -145,9 +145,10 @@ def generate_deal_id(length: int = 11) -> str:
         conn.close()
 
 def convert_currency(amount_rub: float) -> dict:
-    """Конвертация суммы RUB в USDT, TON, PX"""    usdt = round(amount_rub / USDT_TO_RUB, 2)
+    """Конвертация суммы RUB в USDT, TON, PX"""
+    usdt = round(amount_rub / USDT_TO_RUB, 2)
     ton = round(usdt / TON_TO_USDT, 4)
-    px = round(usdt * PX_TO_USDT * FEE_PERCENT, 2)  # с комиссией 1%
+    px = round(usdt * PX_TO_USDT * FEE_PERCENT, 2)
     return {
         'usdt': usdt,
         'ton': ton,
