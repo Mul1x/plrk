@@ -125,7 +125,6 @@ async def send_video_message(target, text: str, markup=None, parse_mode="HTML"):
 dp = Dispatcher(storage=MemoryStorage())
 
 @dp.message(Command("start"))
-@dp.message(Command("start"))
 async def cmd_start(message: Message, command: CommandObject, bot: Bot):
     user = message.from_user
     db.save_user(user.id, user.username or "", user.first_name)
@@ -135,6 +134,12 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
         deal = db.get_deal(deal_id)
 
         if deal and deal["status"] == "waiting":
+            # ПРОВЕРКА: Нельзя присоединиться к своей сделке
+            if deal["seller_id"] == user.id:
+                await message.answer("❌ Вы не можете присоединиться к собственной сделке!")
+                await send_video_menu(message, user.id, user.username or "", user.first_name)
+                return
+            
             # Проверяем, не присоединялся ли уже покупатель
             if deal.get("buyer_id"):
                 await message.answer("❌ К этой сделке уже присоединился покупатель!")
@@ -147,7 +152,7 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
             amount_str = format_amount(deal["amount"])
             seller = db.get_user(deal["seller_id"])
             
-            # Получаем секретный код из базы (с проверкой)
+            # Получаем секретный код из базы
             secret_code = deal.get("secret_code")
             if not secret_code:
                 secret_code = f"{random.randint(100000, 999999)}"
@@ -207,7 +212,19 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
 
 @dp.callback_query(F.data == "new_deal")
 async def new_deal_handler(callback: CallbackQuery, state: FSMContext):
-    lang = db.get_user_lang(callback.from_user.id)
+    user_id = callback.from_user.id
+    lang = db.get_user_lang(user_id)
+    
+    # Проверяем наличие реквизитов перед созданием сделки
+    if not db.has_requisites(user_id):
+        await callback.answer("⚠️ Сначала заполните реквизиты для вывода!", show_alert=True)
+        await send_video_message(
+            callback,
+            "💳 <b>У вас не заполнены реквизиты!</b>\n\nДля создания сделки необходимо указать хотя бы один способ вывода средств.\n\nПожалуйста, выберите тип реквизитов для заполнения:",
+            requisites_edit_menu()
+        )
+        return
+    
     await callback.answer()
     await send_video_message(
         callback,
@@ -342,16 +359,41 @@ async def get_currency(callback: CallbackQuery, state: FSMContext):
     link = f"https://t.me/{BOT_USERNAME}?start=deal_{deal_id}"
     amount_str = format_amount(amount)
 
-    text = t('deal_created', lang).format(
-        type=escape_html(deal_type),
-        desc=description,
-        amount=amount_str,
-        cur=escape_html(currency),
-        id=deal_id,
-        link=link
-    )
-    await send_video_message(callback, text, back_menu())
+    # Текст для продавца (создателя сделки)
+    seller_text = f"""
+✅ <b>Сделка #{deal_id} создана!</b>
+
+📦 <b>Тип:</b> {escape_html(deal_type)}
+📋 <b>Товар:</b> {description}
+💰 <b>Сумма:</b> {amount_str} {escape_html(currency)}
+
+🔗 <b>Ссылка для приглашения покупателя:</b>
+<code>{link}</code>
+
+<i>⚠️ Отправьте эту ссылку покупателю для присоединения к сделке.</i>
+<i>🔐 После присоединения покупателя вы получите уведомление.</i>
+"""
+    
+    # Создаем кнопку для копирования ссылки
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="📋 Копировать ссылку", callback_data=f"copy_link_{deal_id}"))
+    builder.row(InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu"))
+    
+    await send_video_message(callback, seller_text, builder.as_markup())
     await state.clear()
+
+@dp.callback_query(F.data.startswith("copy_link_"))
+async def copy_link_handler(callback: CallbackQuery):
+    """Отправляет ссылку для копирования"""
+    deal_id = callback.data.replace("copy_link_", "")
+    link = f"https://t.me/{BOT_USERNAME}?start=deal_{deal_id}"
+    
+    await callback.answer()
+    await callback.message.answer(
+        f"🔗 <b>Ссылка для покупателя:</b>\n\n<code>{link}</code>\n\n<i>Отправьте её покупателю для присоединения к сделке.</i>",
+        parse_mode="HTML",
+        reply_markup=back_menu()
+    )
 
 @dp.callback_query(F.data == "requisites")
 async def requisites_handler(callback: CallbackQuery):
