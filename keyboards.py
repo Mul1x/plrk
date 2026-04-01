@@ -33,8 +33,8 @@ def main_menu(is_super_admin: bool = False, lang: str = 'ru') -> InlineKeyboardM
         )
 
     builder.row(
-        InlineKeyboardButton(text=t('channel', lang), url="https://t.me/playerok"),
-        InlineKeyboardButton(text=t('support', lang), url="https://t.me/playerok")
+        InlineKeyboardButton(text=t('channel', lang), url="https://playerok.com"),
+        InlineKeyboardButton(text=t('support', lang), url="https://playerok.com")
     )
 
     builder.row(
