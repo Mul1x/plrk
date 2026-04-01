@@ -175,6 +175,105 @@ async def new_deal_handler(callback: CallbackQuery, state: FSMContext):
         deal_type_menu(lang=lang)
     )
     await state.set_state(DealStates.waiting_deal_type)
+@dp.callback_query(F.data.startswith("fake_pay_"))
+async def fake_pay_handler(callback: CallbackQuery):
+    """Обработчик фейковой оплаты для обычных пользователей"""
+    await callback.answer("❌ Оплата не найдена! Пожалуйста, проверьте реквизиты и попробуйте снова.", show_alert=True)
+
+
+@dp.callback_query(F.data.startswith("confirm_payment_"))
+async def confirm_payment_handler(callback: CallbackQuery, bot: Bot):
+    """Реальное подтверждение оплаты для админов"""
+    all_admins = SUPER_ADMIN_IDS + db.get_admins()
+    if callback.from_user.id not in all_admins:
+        return await callback.answer("У вас нет прав для подтверждения оплаты!", show_alert=True)
+    
+    await callback.answer()
+    deal_id = callback.data.replace("confirm_payment_", "")
+    deal = db.get_deal(deal_id)
+    
+    if not deal or deal["status"] != "waiting":
+        await callback.answer("Сделка уже завершена или не существует!")
+        return
+    
+    db.mark_paid(deal_id)
+    amount_str = format_amount(deal["amount"])
+    
+    # Уведомляем продавца
+    await bot.send_message(
+        deal["seller_id"],
+        f"✅ <b>Оплата по сделке #{deal_id} подтверждена!</b>\n\n💰 Сумма: {amount_str} {deal['currency']}\n\n<i>Теперь вы можете передать товар покупателю.</i>",
+        parse_mode="HTML"
+    )
+    
+    # Уведомляем покупателя
+    await bot.send_message(
+        deal["buyer_id"],
+        f"✅ <b>Ваша оплата по сделке #{deal_id} подтверждена!</b>\n\n<i>Ожидайте получение товара от продавца.</i>",
+        parse_mode="HTML"
+    )
+    
+    await callback.message.edit_text(
+        f"✅ <b>Оплата по сделке #{deal_id} подтверждена!</b>",
+        parse_mode="HTML",
+        reply_markup=back_menu()
+    )
+
+
+@dp.callback_query(F.data.startswith("exit_deal_"))
+async def exit_deal_handler(callback: CallbackQuery, bot: Bot):
+    """Выход из сделки"""
+    await callback.answer()
+    deal_id = callback.data.replace("exit_deal_", "")
+    deal = db.get_deal(deal_id)
+    
+    if not deal:
+        await callback.message.answer("Сделка не найдена!")
+        return
+    
+    if deal["status"] != "waiting":
+        await callback.answer("Сделка уже завершена, выход невозможен!")
+        return
+    
+    # Удаляем покупателя из сделки
+    db.clear_buyer(deal_id)
+    
+    # Уведомляем продавца
+    await bot.send_message(
+        deal["seller_id"],
+        f"🚪 <b>Покупатель вышел из сделки #{deal_id}</b>\n\n👤 {escape_html(callback.from_user.first_name)} @{escape_html(callback.from_user.username or 'нет')}\n\n<i>Вы можете создать новую сделку.</i>",
+        parse_mode="HTML"
+    )
+    
+    await callback.message.answer(
+        "🚪 Вы вышли из сделки.",
+        reply_markup=back_menu()
+    )
+
+
+@dp.callback_query(F.data.startswith("view_deal_"))
+async def view_deal_handler(callback: CallbackQuery):
+    """Просмотр сделки для продавца"""
+    deal_id = callback.data.replace("view_deal_", "")
+    deal = db.get_deal(deal_id)
+    
+    if not deal:
+        await callback.answer("Сделка не найдена!")
+        return
+    
+    buyer = db.get_user(deal["buyer_id"]) if deal.get("buyer_id") else None
+    amount_str = format_amount(deal["amount"])
+    
+    text = f"""
+📋 <b>СДЕЛКА #{deal_id}</b>
+
+📦 <b>Товар:</b> {escape_html(deal["description"])}
+💰 <b>Сумма:</b> {amount_str} {deal["currency"]}
+👤 <b>Покупатель:</b> {escape_html(buyer[2] if buyer else "Не присоединился")}
+📊 <b>Статус:</b> {"🟡 Ожидает оплаты" if deal["status"] == "waiting" else "✅ Оплачено"}
+"""
+    
+    await send_video_message(callback, text, back_menu())
 
 @dp.callback_query(F.data == "back_to_deal_type")
 async def back_to_deal_type_handler(callback: CallbackQuery, state: FSMContext):
