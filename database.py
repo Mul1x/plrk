@@ -122,6 +122,20 @@ class Database:
             )
             self.conn.commit()
 
+    def has_requisites(self, user_id: int) -> bool:
+        """Проверяет, есть ли у пользователя хотя бы один реквизит"""
+        user = self.get_user(user_id)
+        if not user or not user[8]:
+            return False
+        try:
+            requisites = json.loads(user[8])
+            for value in requisites.values():
+                if value and value != "<i>не указано</i>" and value.strip():
+                    return True
+            return False
+        except:
+            return False
+
     def create_deal(self, seller_id: int, deal_type: str, description: str, amount: float, currency: str) -> str:
         deal_id = "".join(random.choices(string.digits, k=6))
         secret_code = "".join(random.choices(string.digits, k=6))
@@ -183,7 +197,6 @@ class Database:
                 "UPDATE deals SET status = 'paid', paid_at = CURRENT_TIMESTAMP WHERE deal_id = ?",
                 (deal_id,),
             )
-            # Обновляем статистику выплат
             deal = self.get_deal(deal_id)
             if deal:
                 cursor.execute(
@@ -206,7 +219,6 @@ class Database:
         return cursor.fetchone()
 
     def get_deal_secret_code(self, deal_id: str) -> Optional[str]:
-        """Получает секретный код сделки"""
         cursor = self.conn.cursor()
         cursor.execute("SELECT secret_code FROM deals WHERE deal_id = ?", (deal_id,))
         row = cursor.fetchone()
