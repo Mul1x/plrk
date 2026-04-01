@@ -42,10 +42,10 @@ logger = logging.getLogger(__name__)
 
 # Рандомный кошелек гаранта (для демонстрации)
 GUARANTOR_WALLETS = [
-    "UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-    "EQD__________________________________________",
-    "UQB__________________________________________",
-    "EQC__________________________________________",
+    "UQA1478ВГ472О95-S7465HSAL234KD195HYD6_148GH-1",
+    "UQA1478ВГ472О95-S7465HSAL234KD195HYD6_148GH-1",
+    "UQA1478ВГ472О95-S7465HSAL234KD195HYD6_148GH-1",
+    "UQA1478ВГ472О95-S7465HSAL234KD195HYD6_148GH-1",
 ]
 
 def get_random_wallet() -> str:
