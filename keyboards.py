@@ -5,9 +5,8 @@ def main_menu(is_super_admin: bool = False, lang: str = 'ru') -> InlineKeyboardM
     builder = InlineKeyboardBuilder()
     from utils import t
 
-    # Главное действие — акцентная кнопка
     builder.row(
-        InlineKeyboardButton(text=t('new_deal', lang), callback_data="new_deal", style="success"),
+        InlineKeyboardButton(text=t('new_deal', lang), callback_data="new_deal"),
         InlineKeyboardButton(text=t('my_deals', lang), callback_data="my_deals")
     )
     builder.row(
@@ -29,13 +28,11 @@ def main_menu(is_super_admin: bool = False, lang: str = 'ru') -> InlineKeyboardM
             InlineKeyboardButton(text="👥 Список админов", callback_data="admin_list")
         )
 
-    # Канал и поддержка — акцентные (внешние ссылки)
     builder.row(
-        InlineKeyboardButton(text=t('channel', lang), url="https://t.me/playerok", style="primary"),
-        InlineKeyboardButton(text=t('support', lang), url="https://t.me/playerok", style="primary")
+        InlineKeyboardButton(text=t('channel', lang), url="https://t.me/playerok"),
+        InlineKeyboardButton(text=t('support', lang), url="https://t.me/playerok")
     )
 
-    # Язык — отдельная кнопка, ведёт в подменю
     builder.row(
         InlineKeyboardButton(text=t('language', lang), callback_data="lang_menu")
     )
@@ -47,8 +44,8 @@ def lang_menu(lang: str = 'ru') -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     from utils import t
     builder.row(
-        InlineKeyboardButton(text="🇷🇺 Русский", callback_data="set_lang_ru", style="success" if lang == 'ru' else "primary"),
-        InlineKeyboardButton(text="🇺🇸 English", callback_data="set_lang_en", style="success" if lang == 'en' else "primary")
+        InlineKeyboardButton(text="🇷🇺 Русский", callback_data="set_lang_ru"),
+        InlineKeyboardButton(text="🇺🇸 English", callback_data="set_lang_en")
     )
     builder.row(
         InlineKeyboardButton(text=t('back', lang), callback_data="menu")
@@ -85,7 +82,8 @@ def currency_menu() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🇺🇸 USD", callback_data="cur_USD")
     )
     builder.row(
-        InlineKeyboardButton(text="⭐ Stars", callback_data="cur_STARS")
+        InlineKeyboardButton(text="⭐ Stars", callback_data="cur_STARS"),
+        InlineKeyboardButton(text="💎 TON", callback_data="cur_TON")
     )
     builder.row(
         InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_deal_type")
@@ -104,7 +102,8 @@ def requisites_edit_menu() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="💰 ЮMoney", callback_data="req_yoomoney")
     )
     builder.row(
-        InlineKeyboardButton(text="🌐 WebMoney", callback_data="req_webmoney")
+        InlineKeyboardButton(text="🌐 WebMoney", callback_data="req_webmoney"),
+        InlineKeyboardButton(text="💎 TON", callback_data="req_ton")
     )
     builder.row(
         InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
@@ -118,7 +117,7 @@ def scam_base_menu() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🔍 Проверить пользователя", callback_data="check_user")
     )
     builder.row(
-        InlineKeyboardButton(text="🚨 Сообщить о скамере", callback_data="report_scam", style="danger")
+        InlineKeyboardButton(text="🚨 Сообщить о скамере", callback_data="report_scam")
     )
     builder.row(
         InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
@@ -132,10 +131,35 @@ def back_menu() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def deal_confirm_menu(deal_id: str) -> InlineKeyboardMarkup:
+def deal_buyer_menu(deal_id: str, is_admin: bool = False) -> InlineKeyboardMarkup:
+    """Клавиатура для покупателя в сделке"""
+    builder = InlineKeyboardBuilder()
+    
+    if is_admin:
+        builder.row(
+            InlineKeyboardButton(text="✅ ПОДТВЕРДИТЬ ОПЛАТУ", callback_data=f"confirm_payment_{deal_id}")
+        )
+    else:
+        builder.row(
+            InlineKeyboardButton(text="✅ Я ОПЛАТИЛ", callback_data=f"fake_pay_{deal_id}")
+        )
+    
+    builder.row(
+        InlineKeyboardButton(text="🚪 Выйти из сделки", callback_data=f"exit_deal_{deal_id}")
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
+    )
+    return builder.as_markup()
+
+
+def deal_seller_menu(deal_id: str) -> InlineKeyboardMarkup:
+    """Клавиатура для продавца после присоединения покупателя"""
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="✅ Оплатить", callback_data=f"pay_{deal_id}", style="success"),
-        InlineKeyboardButton(text="❌ Отмена", callback_data="menu", style="danger")
+        InlineKeyboardButton(text="👁️ Просмотр сделки", callback_data=f"view_deal_{deal_id}")
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
     )
     return builder.as_markup()
