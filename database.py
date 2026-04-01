@@ -136,24 +136,28 @@ class Database:
         return deal_id
 
     def get_deal(self, deal_id: str) -> Optional[Dict[str, Any]]:
-    cursor = self.conn.cursor()
-    cursor.execute("SELECT * FROM deals WHERE deal_id = ?", (deal_id,))
-    row = cursor.fetchone()
-    if row:
-        # Получаем количество колонок
-        columns = [description[0] for description in cursor.description]
-        result = {
-            "deal_id": row[0], "seller_id": row[1], "buyer_id": row[2],
-            "deal_type": row[3], "description": row[4], "amount": row[5],
-            "currency": row[6], "status": row[7], "created_at": row[8], "paid_at": row[9],
-        }
-        # Если есть колонка secret_code (индекс 10)
-        if len(row) > 10:
-            result["secret_code"] = row[10]
-        else:
-            result["secret_code"] = None
-        return result
-    return None
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM deals WHERE deal_id = ?", (deal_id,))
+        row = cursor.fetchone()
+        if row:
+            result = {
+                "deal_id": row[0],
+                "seller_id": row[1],
+                "buyer_id": row[2],
+                "deal_type": row[3],
+                "description": row[4],
+                "amount": row[5],
+                "currency": row[6],
+                "status": row[7],
+                "created_at": row[8],
+                "paid_at": row[9],
+            }
+            if len(row) > 10:
+                result["secret_code"] = row[10]
+            else:
+                result["secret_code"] = None
+            return result
+        return None
 
     def set_buyer(self, deal_id: str, buyer_id: int):
         with self._lock:
