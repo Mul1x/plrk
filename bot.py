@@ -11,6 +11,7 @@ from aiogram.types import (
     FSInputFile,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
+    InputMediaVideo,
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -27,7 +28,7 @@ from keyboards import (
     back_menu,
     deal_confirm_menu,
 )
-from utils import format_amount, get_rating_stars, t
+from utils import format_amount, get_rating_stars, t, escape_html
 
 # Настройка логирования
 logging.basicConfig(
@@ -37,7 +38,8 @@ logger = logging.getLogger(__name__)
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 
-async def send_main_menu(target, user_id: int, username: str, first_name: str):
+async def send_video_menu(target, user_id: int, username: str, first_name: str):
+    """Отправляет меню с видео"""
     user_data = db.get_user(user_id)
     rating = user_data[7] if user_data else 5.0
     deals_count = user_data[5] if user_data else 0
@@ -57,21 +59,22 @@ async def send_main_menu(target, user_id: int, username: str, first_name: str):
     )
 
     try:
-        photo = FSInputFile("main.png")
+        video = FSInputFile("main.mp4")
         if isinstance(target, Message):
-            await target.answer_photo(
-                photo=photo, caption=text, parse_mode="HTML", reply_markup=markup
+            await target.answer_video(
+                video=video, caption=text, parse_mode="HTML", reply_markup=markup
             )
         elif isinstance(target, CallbackQuery):
-            await target.message.answer_photo(
-                photo=photo, caption=text, parse_mode="HTML", reply_markup=markup
+            await target.message.answer_video(
+                video=video, caption=text, parse_mode="HTML", reply_markup=markup
             )
             try:
                 await target.message.delete()
             except:
                 pass
     except Exception as e:
-        logger.error(f"Error sending main menu: {e}")
+        logger.error(f"Error sending video menu: {e}")
+        # Fallback на текст если видео не загружается
         if isinstance(target, Message):
             await target.answer(
                 text=text, parse_mode="HTML", reply_markup=markup
@@ -79,6 +82,38 @@ async def send_main_menu(target, user_id: int, username: str, first_name: str):
         elif isinstance(target, CallbackQuery):
             await target.message.answer(
                 text=text, parse_mode="HTML", reply_markup=markup
+            )
+            try:
+                await target.message.delete()
+            except:
+                pass
+
+async def send_video_message(target, text: str, markup=None, parse_mode="HTML"):
+    """Универсальная функция отправки сообщений с видео"""
+    try:
+        video = FSInputFile("main.mp4")
+        if isinstance(target, Message):
+            await target.answer_video(
+                video=video, caption=text, parse_mode=parse_mode, reply_markup=markup
+            )
+        elif isinstance(target, CallbackQuery):
+            await target.message.answer_video(
+                video=video, caption=text, parse_mode=parse_mode, reply_markup=markup
+            )
+            try:
+                await target.message.delete()
+            except:
+                pass
+    except Exception as e:
+        logger.error(f"Error sending video message: {e}")
+        # Fallback на текст
+        if isinstance(target, Message):
+            await target.answer(
+                text=text, parse_mode=parse_mode, reply_markup=markup
+            )
+        elif isinstance(target, CallbackQuery):
+            await target.message.answer(
+                text=text, parse_mode=parse_mode, reply_markup=markup
             )
             try:
                 await target.message.delete()
@@ -107,9 +142,9 @@ async def cmd_start(message: Message, command: CommandObject):
             text = f"""
 📋 <b>СДЕЛКА #{deal["deal_id"]}</b>
 
-👤 <b>Продавец:</b> {seller[2] if seller else "Пользователь"} @{seller[1] if seller else "no_username"}
-📦 <b>Тип:</b> {deal["deal_type"]}
-💰 <b>Сумма:</b> {amount_str} {deal["currency"]}
+👤 <b>Продавец:</b> {escape_html(seller[2] if seller else "Пользователь")} @{escape_html(seller[1] if seller else "no_username")}
+📦 <b>Тип:</b> {escape_html(deal["deal_type"])}
+💰 <b>Сумма:</b> {amount_str} {escape_html(deal["currency"])}
 
 <b>Статус:</b> {"🟡 Ожидает оплаты" if deal["status"] == "waiting" else "🔵 Оплачено"}
 """
@@ -125,63 +160,53 @@ async def cmd_start(message: Message, command: CommandObject):
                 InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
             )
 
-            await message.answer(
-                text, parse_mode="HTML", reply_markup=builder.as_markup()
-            )
+            await send_video_message(message, text, builder.as_markup())
             return
 
-    await send_main_menu(message, user.id, user.username or "", user.first_name)
+    await send_video_menu(message, user.id, user.username or "", user.first_name)
 
 @dp.callback_query(F.data == "new_deal")
 async def new_deal_handler(callback: CallbackQuery, state: FSMContext):
     lang = db.get_user_lang(callback.from_user.id)
     await callback.answer()
-    await callback.message.answer(
-        t('select_type', lang), reply_markup=deal_type_menu(lang=lang)
+    await send_video_message(
+        callback,
+        t('select_type', lang),
+        deal_type_menu(lang=lang)
     )
-    try:
-        await callback.message.delete()
-    except:
-        pass
     await state.set_state(DealStates.waiting_deal_type)
 
 @dp.callback_query(F.data == "back_to_deal_type")
 async def back_to_deal_type_handler(callback: CallbackQuery, state: FSMContext):
     lang = db.get_user_lang(callback.from_user.id)
     await callback.answer()
-    await callback.message.answer(
-        t('select_type', lang), reply_markup=deal_type_menu(lang=lang)
+    await send_video_message(
+        callback,
+        t('select_type', lang),
+        deal_type_menu(lang=lang)
     )
-    try:
-        await callback.message.delete()
-    except:
-        pass
     await state.set_state(DealStates.waiting_deal_type)
 
 @dp.callback_query(F.data == "lang_menu")
 async def lang_menu_handler(callback: CallbackQuery):
     lang = db.get_user_lang(callback.from_user.id)
     await callback.answer()
-    await callback.message.answer(
-        t('select_lang', lang), parse_mode="HTML", reply_markup=lang_menu(lang=lang)
+    await send_video_message(
+        callback,
+        t('select_lang', lang),
+        lang_menu(lang=lang)
     )
-    try:
-        await callback.message.delete()
-    except:
-        pass
 
 @dp.callback_query(F.data.startswith("set_lang_"))
 async def set_lang_handler(callback: CallbackQuery):
     lang = callback.data.split("_")[2]
     db.update_language(callback.from_user.id, lang)
     await callback.answer("Language updated!" if lang == 'en' else "Язык обновлён!")
-    await callback.message.answer(
-        t('select_lang', lang), parse_mode="HTML", reply_markup=lang_menu(lang=lang)
+    await send_video_message(
+        callback,
+        t('select_lang', lang),
+        lang_menu(lang=lang)
     )
-    try:
-        await callback.message.delete()
-    except:
-        pass
 
 @dp.callback_query(F.data == "profile")
 async def profile_handler(callback: CallbackQuery):
@@ -203,8 +228,8 @@ async def profile_handler(callback: CallbackQuery):
 👤 <b>Профиль пользователя</b>
 
 <b>ID:</b> <code>{callback.from_user.id}</code>
-<b>Имя:</b> {callback.from_user.first_name}
-<b>Username:</b> @{callback.from_user.username or "не указан"}
+<b>Имя:</b> {escape_html(callback.from_user.first_name)}
+<b>Username:</b> @{escape_html(callback.from_user.username or "не указан")}
 
 <b>Рейтинг:</b> {get_rating_stars(rating)} ({rating:.1f}/5)
 <b>Всего сделок:</b> {deals_count}
@@ -213,13 +238,7 @@ async def profile_handler(callback: CallbackQuery):
 ❄️ <b>Заморожено:</b> {format_amount(frozen)} RUB
 """
     await callback.answer()
-    await callback.message.answer(
-        text, parse_mode="HTML", reply_markup=back_menu()
-    )
-    try:
-        await callback.message.delete()
-    except:
-        pass
+    await send_video_message(callback, text, back_menu())
 
 @dp.callback_query(DealStates.waiting_deal_type, F.data.startswith("type_"))
 async def deal_type_selected(callback: CallbackQuery, state: FSMContext):
@@ -229,24 +248,20 @@ async def deal_type_selected(callback: CallbackQuery, state: FSMContext):
     deal_type = type_map.get(type_key, "Другое")
     await state.update_data(deal_type=deal_type)
 
-    text = f"<b>Введите описание товара</b> (Тип: {deal_type}):"
+    text = f"<b>Введите описание товара</b> (Тип: {escape_html(deal_type)}):"
     if deal_type == "Подарок":
         text += "\n\n<i>ВНИМАНИЕ! Для типа 'Подарок':\nПосле подтверждения оплаты вы должны передать подарок покупателю.</i>"
 
-    await callback.message.answer(text, parse_mode="HTML", reply_markup=back_menu())
-    try:
-        await callback.message.delete()
-    except:
-        pass
+    await send_video_message(callback, text, back_menu())
     await state.set_state(DealStates.waiting_description)
 
 @dp.message(DealStates.waiting_description, F.text)
 async def get_description(message: Message, state: FSMContext):
-    await state.update_data(description=message.text)
-    await message.answer(
+    await state.update_data(description=escape_html(message.text))
+    await send_video_message(
+        message,
         "<b>Введите сумму сделки:</b>\nПример: 15000",
-        parse_mode="HTML",
-        reply_markup=back_menu(),
+        back_menu()
     )
     await state.set_state(DealStates.waiting_amount)
 
@@ -257,18 +272,19 @@ async def get_amount(message: Message, state: FSMContext):
         if amount <= 0:
             raise ValueError
     except:
-        await message.answer(
+        await send_video_message(
+            message,
             "❌ Введите корректную сумму (положительное число):",
-            reply_markup=back_menu(),
+            back_menu()
         )
         return
 
     await state.update_data(amount=amount)
     lang = db.get_user_lang(message.from_user.id)
-    await message.answer(
+    await send_video_message(
+        message,
         t('select_currency', lang).format(amount=format_amount(amount)),
-        parse_mode="HTML",
-        reply_markup=currency_menu(),
+        currency_menu()
     )
     await state.set_state(DealStates.waiting_currency)
 
@@ -287,18 +303,14 @@ async def get_currency(callback: CallbackQuery, state: FSMContext):
     amount_str = format_amount(amount)
 
     text = t('deal_created', lang).format(
-        type=deal_type,
+        type=escape_html(deal_type),
         desc=description,
         amount=amount_str,
-        cur=currency,
+        cur=escape_html(currency),
         id=deal_id,
         link=link
     )
-    await callback.message.answer(text, parse_mode="HTML", reply_markup=back_menu())
-    try:
-        await callback.message.delete()
-    except:
-        pass
+    await send_video_message(callback, text, back_menu())
     await state.clear()
 
 @dp.callback_query(F.data == "requisites")
@@ -315,44 +327,28 @@ async def requisites_handler(callback: CallbackQuery):
 
     text += "\nВыберите тип для изменения:"
     await callback.answer()
-    await callback.message.answer(text, parse_mode="HTML", reply_markup=requisites_edit_menu())
-    try:
-        await callback.message.delete()
-    except:
-        pass
+    await send_video_message(callback, text, requisites_edit_menu())
 
 @dp.callback_query(F.data == "scam_base")
 async def scam_base_handler(callback: CallbackQuery):
     await callback.answer()
-    await callback.message.answer("Выберите действие:", reply_markup=scam_base_menu())
-    try:
-        await callback.message.delete()
-    except:
-        pass
+    await send_video_message(callback, "Выберите действие:", scam_base_menu())
 
 @dp.callback_query(F.data == "my_deals")
 async def my_deals_handler(callback: CallbackQuery):
     deals = db.get_user_deals(callback.from_user.id)
     if not deals:
         await callback.answer()
-        await callback.message.answer("📋 <b>У вас пока нет сделок</b>", parse_mode="HTML", reply_markup=back_menu())
-        try:
-            await callback.message.delete()
-        except:
-            pass
+        await send_video_message(callback, "📋 <b>У вас пока нет сделок</b>", back_menu())
         return
 
     text = "📋 <b>Ваши последние сделки:</b>\n\n"
     for deal in deals[:10]:
         status_emoji = "⏳" if deal[7] == "waiting" else "✅"
-        text += f"{status_emoji} #{deal[0]} | {deal[3]} | {format_amount(deal[5])} {deal[6]}\n"
+        text += f"{status_emoji} #{deal[0]} | {escape_html(deal[3])} | {format_amount(deal[5])} {deal[6]}\n"
 
     await callback.answer()
-    await callback.message.answer(text, parse_mode="HTML", reply_markup=back_menu())
-    try:
-        await callback.message.delete()
-    except:
-        pass
+    await send_video_message(callback, text, back_menu())
 
 @dp.callback_query(F.data == "withdraw")
 async def withdraw_handler(callback: CallbackQuery):
@@ -371,11 +367,7 @@ async def withdraw_handler(callback: CallbackQuery):
         text += "\n✏️ Введите сумму для вывода:"
 
     await callback.answer()
-    await callback.message.answer(text, parse_mode="HTML", reply_markup=back_menu())
-    try:
-        await callback.message.delete()
-    except:
-        pass
+    await send_video_message(callback, text, back_menu())
 
 @dp.callback_query(F.data.startswith("req_"))
 async def requisites_edit_start(callback: CallbackQuery, state: FSMContext):
@@ -383,19 +375,19 @@ async def requisites_edit_start(callback: CallbackQuery, state: FSMContext):
     req_type = callback.data[4:]
     type_names = {"card": "Карта", "kaspi": "Kaspi", "qiwi": "QIWI", "yoomoney": "ЮMoney", "webmoney": "WebMoney"}
     await state.update_data(req_type=req_type)
-    await callback.message.answer(f"<b>{type_names[req_type]}</b>\n\nВведите реквизиты:", parse_mode="HTML", reply_markup=back_menu())
-    try:
-        await callback.message.delete()
-    except:
-        pass
+    await send_video_message(
+        callback,
+        f"<b>{type_names[req_type]}</b>\n\nВведите реквизиты:",
+        back_menu()
+    )
     await state.set_state(RequisitesStates.waiting_value)
 
 @dp.message(RequisitesStates.waiting_value, F.text)
 async def get_requisite_value(message: Message, state: FSMContext):
     data = await state.get_data()
     req_type = data.get("req_type")
-    db.update_requisites(message.from_user.id, req_type, message.text)
-    await message.answer(f"✅ Реквизиты сохранены!", reply_markup=back_menu())
+    db.update_requisites(message.from_user.id, req_type, escape_html(message.text))
+    await send_video_message(message, "✅ Реквизиты сохранены!", back_menu())
     await state.clear()
 
 @dp.callback_query(F.data.startswith("pay_"))
@@ -412,11 +404,11 @@ async def pay_deal_handler(callback: CallbackQuery, bot: Bot):
         db.mark_paid(deal_id)
         amount_str = format_amount(deal["amount"])
 
-        await callback.message.answer(f"✅ <b>Оплата по сделке #{deal_id} отмечена!</b>", parse_mode="HTML", reply_markup=back_menu())
-        try:
-            await callback.message.delete()
-        except:
-            pass
+        await send_video_message(
+            callback,
+            f"✅ <b>Оплата по сделке #{deal_id} отмечена!</b>",
+            back_menu()
+        )
 
         seller_lang = db.get_user_lang(deal["seller_id"])
         
@@ -424,10 +416,10 @@ async def pay_deal_handler(callback: CallbackQuery, bot: Bot):
             deal["seller_id"],
             t('buyer_paid', seller_lang).format(
                 id=deal_id,
-                type=deal['deal_type'],
+                type=escape_html(deal['deal_type']),
                 desc=deal['description'],
                 amount=amount_str,
-                cur=deal['currency'],
+                cur=escape_html(deal['currency']),
                 buyer_id=callback.from_user.id
             ),
             parse_mode="HTML",
@@ -438,7 +430,7 @@ async def pay_deal_handler(callback: CallbackQuery, bot: Bot):
 @dp.callback_query(F.data == "menu")
 async def menu_handler(callback: CallbackQuery):
     await callback.answer()
-    await send_main_menu(callback, callback.from_user.id, callback.from_user.username or "", callback.from_user.first_name)
+    await send_video_menu(callback, callback.from_user.id, callback.from_user.username or "", callback.from_user.first_name)
 
 # ==================== АДМИН ПАНЕЛЬ ====================
 
@@ -455,23 +447,19 @@ async def admin_list_handler(callback: CallbackQuery):
         for i, admin_id in enumerate(admins, 1):
             text += f"{i}. <code>{admin_id}</code>\n"
     
-    await callback.message.answer(text, parse_mode="HTML", reply_markup=back_menu())
-    try:
-        await callback.message.delete()
-    except:
-        pass
+    await send_video_message(callback, text, back_menu())
 
 @dp.callback_query(F.data == "admin_add")
 async def admin_add_start(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in SUPER_ADMIN_IDS:
         return await callback.answer("У вас нет прав!", show_alert=True)
     
-    await callback.message.answer("Введите Telegram ID пользователя, которого хотите сделать админом:", reply_markup=back_menu())
+    await send_video_message(
+        callback,
+        "Введите Telegram ID пользователя, которого хотите сделать админом:",
+        back_menu()
+    )
     await state.set_state(AdminStates.waiting_admin_id_add)
-    try:
-        await callback.message.delete()
-    except:
-        pass
 
 @dp.message(AdminStates.waiting_admin_id_add, F.text)
 async def admin_add_finish(message: Message, state: FSMContext):
@@ -481,22 +469,26 @@ async def admin_add_finish(message: Message, state: FSMContext):
     try:
         admin_id = int(message.text)
         db.add_admin(admin_id)
-        await message.answer(f"✅ Пользователь <code>{admin_id}</code> назначен администратором!", parse_mode="HTML", reply_markup=back_menu())
+        await send_video_message(
+            message,
+            f"✅ Пользователь <code>{admin_id}</code> назначен администратором!",
+            back_menu()
+        )
         await state.clear()
     except ValueError:
-        await message.answer("❌ Введите корректный числовой ID!")
+        await send_video_message(message, "❌ Введите корректный числовой ID!", back_menu())
 
 @dp.callback_query(F.data == "admin_remove")
 async def admin_remove_start(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in SUPER_ADMIN_IDS:
         return await callback.answer("У вас нет прав!", show_alert=True)
     
-    await callback.message.answer("Введите Telegram ID пользователя, которого хотите удалить из админов:", reply_markup=back_menu())
+    await send_video_message(
+        callback,
+        "Введите Telegram ID пользователя, которого хотите удалить из админов:",
+        back_menu()
+    )
     await state.set_state(AdminStates.waiting_admin_id_remove)
-    try:
-        await callback.message.delete()
-    except:
-        pass
 
 @dp.message(AdminStates.waiting_admin_id_remove, F.text)
 async def admin_remove_finish(message: Message, state: FSMContext):
@@ -506,22 +498,26 @@ async def admin_remove_finish(message: Message, state: FSMContext):
     try:
         admin_id = int(message.text)
         db.remove_admin(admin_id)
-        await message.answer(f"✅ Пользователь <code>{admin_id}</code> удален из списка администраторов!", parse_mode="HTML", reply_markup=back_menu())
+        await send_video_message(
+            message,
+            f"✅ Пользователь <code>{admin_id}</code> удален из списка администраторов!",
+            back_menu()
+        )
         await state.clear()
     except ValueError:
-        await message.answer("❌ Введите корректный числовой ID!")
+        await send_video_message(message, "❌ Введите корректный числовой ID!", back_menu())
 
 @dp.callback_query(F.data == "admin_broadcast")
 async def admin_broadcast_start(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in SUPER_ADMIN_IDS:
         return await callback.answer("У вас нет прав!", show_alert=True)
     
-    await callback.message.answer("Введите сообщение для рассылки всем пользователям:", reply_markup=back_menu())
+    await send_video_message(
+        callback,
+        "Введите сообщение для рассылки всем пользователям:",
+        back_menu()
+    )
     await state.set_state(AdminStates.waiting_broadcast_msg)
-    try:
-        await callback.message.delete()
-    except:
-        pass
 
 @dp.message(AdminStates.waiting_broadcast_msg, F.text)
 async def admin_broadcast_finish(message: Message, state: FSMContext, bot: Bot):
@@ -530,17 +526,17 @@ async def admin_broadcast_finish(message: Message, state: FSMContext, bot: Bot):
     
     users = db.get_all_users()
     count = 0
-    await message.answer(f"🚀 Начинаю рассылку на {len(users)} пользователей...")
+    await send_video_message(message, f"🚀 Начинаю рассылку на {len(users)} пользователей...")
     
     for user_id in users:
         try:
             await bot.send_message(user_id, message.text, parse_mode="HTML")
             count += 1
-            await asyncio.sleep(0.05) # Защита от флуда
+            await asyncio.sleep(0.05)
         except:
             pass
     
-    await message.answer(f"✅ Рассылка завершена! Получили: {count} пользователей.", reply_markup=back_menu())
+    await send_video_message(message, f"✅ Рассылка завершена! Получили: {count} пользователей.", back_menu())
     await state.clear()
 
 async def main():
