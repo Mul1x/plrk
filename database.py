@@ -24,7 +24,8 @@ class Database:
                 currency TEXT DEFAULT 'RUB',
                 status TEXT DEFAULT 'waiting',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                paid_at TIMESTAMP
+                paid_at TIMESTAMP,
+                secret_code TEXT
             )
         """)
         cursor.execute("""
@@ -123,11 +124,12 @@ class Database:
 
     def create_deal(self, seller_id: int, deal_type: str, description: str, amount: float, currency: str) -> str:
         deal_id = "".join(random.choices(string.digits, k=6))
+        secret_code = "".join(random.choices(string.digits, k=6))
         with self._lock:
             cursor = self.conn.cursor()
             cursor.execute(
-                "INSERT INTO deals (deal_id, seller_id, deal_type, description, amount, currency) VALUES (?, ?, ?, ?, ?, ?)",
-                (deal_id, seller_id, deal_type, description, amount, currency),
+                "INSERT INTO deals (deal_id, seller_id, deal_type, description, amount, currency, secret_code) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (deal_id, seller_id, deal_type, description, amount, currency, secret_code),
             )
             cursor.execute("UPDATE stats SET total_deals = total_deals + 1 WHERE id = 1")
             self.conn.commit()
@@ -142,6 +144,7 @@ class Database:
                 "deal_id": row[0], "seller_id": row[1], "buyer_id": row[2],
                 "deal_type": row[3], "description": row[4], "amount": row[5],
                 "currency": row[6], "status": row[7], "created_at": row[8], "paid_at": row[9],
+                "secret_code": row[10] if len(row) > 10 else None,
             }
         return None
 
@@ -153,6 +156,15 @@ class Database:
             )
             self.conn.commit()
 
+    def clear_buyer(self, deal_id: str):
+        """Очищает покупателя в сделке (при выходе)"""
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "UPDATE deals SET buyer_id = NULL WHERE deal_id = ?", (deal_id,)
+            )
+            self.conn.commit()
+
     def mark_paid(self, deal_id: str):
         with self._lock:
             cursor = self.conn.cursor()
@@ -160,17 +172,20 @@ class Database:
                 "UPDATE deals SET status = 'paid', paid_at = CURRENT_TIMESTAMP WHERE deal_id = ?",
                 (deal_id,),
             )
-            cursor.execute(
-                "UPDATE stats SET total_paid = total_paid + (SELECT amount FROM deals WHERE deal_id = ?) WHERE id = 1",
-                (deal_id,),
-            )
+            # Обновляем статистику выплат
+            deal = self.get_deal(deal_id)
+            if deal:
+                cursor.execute(
+                    "UPDATE stats SET total_paid = total_paid + ? WHERE id = 1",
+                    (deal["amount"],),
+                )
             self.conn.commit()
 
     def get_user_deals(self, user_id: int) -> list:
         cursor = self.conn.cursor()
         cursor.execute(
-            "SELECT * FROM deals WHERE seller_id = ? ORDER BY created_at DESC",
-            (user_id,),
+            "SELECT * FROM deals WHERE seller_id = ? OR buyer_id = ? ORDER BY created_at DESC",
+            (user_id, user_id),
         )
         return cursor.fetchall()
 
@@ -178,5 +193,12 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM stats WHERE id = 1")
         return cursor.fetchone()
+
+    def get_deal_secret_code(self, deal_id: str) -> Optional[str]:
+        """Получает секретный код сделки"""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT secret_code FROM deals WHERE deal_id = ?", (deal_id,))
+        row = cursor.fetchone()
+        return row[0] if row else None
 
 db = Database()
