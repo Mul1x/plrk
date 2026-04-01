@@ -17,6 +17,10 @@ def main_menu(is_super_admin: bool = False, lang: str = 'ru') -> InlineKeyboardM
         InlineKeyboardButton(text=t('withdraw', lang), callback_data="withdraw"),
         InlineKeyboardButton(text=t('scam_base', lang), callback_data="scam_base")
     )
+    # Кнопка для ВСЕХ пользователей
+    builder.row(
+        InlineKeyboardButton(text="🔄 Восстановить сделку", callback_data="restore_deal")
+    )
 
     if is_super_admin:
         builder.row(
