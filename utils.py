@@ -29,7 +29,7 @@ MESSAGES = {
         'requisites': "💳 Реквизиты",
         'withdraw': "💰 Вывод",
         'scam_base': "⚠️ Скам‑база",
-        'channel': "📢 Канал",
+        'channel': "🌐 Сайт",
         'support': "🆘 Поддержка",
         'language': "🌐 Язык",
         'select_type': "📦 <b>Выберите тип сделки:</b>",
