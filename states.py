@@ -5,6 +5,7 @@ class DealStates(StatesGroup):
     waiting_description = State()
     waiting_amount = State()
     waiting_currency = State()
+    waiting_restore_link = State()  # ДЛЯ ВОССТАНОВЛЕНИЯ СДЕЛКИ
 
 class RequisitesStates(StatesGroup):
     waiting_value = State()
