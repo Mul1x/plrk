@@ -1,19 +1,27 @@
+import html
+
 def format_amount(amount: float) -> str:
     return f"{amount:,.2f}".replace(",", " ")
 
 def get_rating_stars(rating: float) -> str:
     return "★" * int(rating) + "☆" * (5 - int(rating))
 
+def escape_html(text: str) -> str:
+    """Экранирует HTML-спецсимволы для безопасного отображения"""
+    return html.escape(str(text))
+
 MESSAGES = {
     'ru': {
         'main_menu': (
-            "🎁 <b>Playerok NFT</b>\n\n"
-            "👋 Привет, <b>{name}</b>!\n"
+            "🎁 <b>PlayerOk</b> — Мы специализированный сервис по обеспечению безопасности вне биржевых сделок.\n\n"
+            "<i>Автоматизированный алгоритм исполнения.\n"
+            "Скорость и автоматизация.\n"
+            "Удобный и быстрый вывод средств.</i>\n\n"
+            "• Комиссия сервиса: <b>3%</b>\n"
+            "• Режим работы: <b>24/7</b>\n\n"
+            "💰 <b>Выплачено всего:</b> <code>{total} RUB</code>\n\n"
             "⭐ <b>Рейтинг:</b> {rating} <code>{val}/5</code>  •  🤝 <b>Сделок:</b> <code>{deals}</code>\n\n"
-            "Добро пожаловать в гарант‑сервис для <b>безопасных сделок</b>!\n\n"
-            "🛡 Мы обеспечиваем <b>защиту обеих сторон</b>, прозрачные условия и <b>быстрые выплаты</b>.\n\n"
-            "💸 <b>Выплачено:</b> <code>{total} RUB</code>\n"
-            "📊 <b>Комиссия сервиса:</b> <code>1.5%</code>"
+            "<i>Выберите нужный раздел ниже:</i>"
         ),
         'new_deal': "🟢 Новая сделка",
         'my_deals': "📋 Мои сделки",
@@ -59,13 +67,15 @@ MESSAGES = {
     },
     'en': {
         'main_menu': (
-            "🎁 <b>Playerok NFT</b>\n\n"
-            "👋 Hello, <b>{name}</b>!\n"
+            "🎁 <b>PlayerOk</b> — We are a specialized service for ensuring security of off-exchange deals.\n\n"
+            "<i>Automated execution algorithm.\n"
+            "Speed and automation.\n"
+            "Convenient and fast withdrawals.</i>\n\n"
+            "• Service commission: <b>3%</b>\n"
+            "• Working hours: <b>24/7</b>\n\n"
+            "💰 <b>Total paid out:</b> <code>{total} RUB</code>\n\n"
             "⭐ <b>Rating:</b> {rating} <code>{val}/5</code>  •  🤝 <b>Deals:</b> <code>{deals}</code>\n\n"
-            "Welcome to the escrow service for <b>safe deals</b>!\n\n"
-            "🛡 We provide <b>protection for both parties</b>, transparent terms and <b>fast payouts</b>.\n\n"
-            "💸 <b>Paid out:</b> <code>{total} RUB</code>\n"
-            "📊 <b>Service fee:</b> <code>1.5%</code>"
+            "<i>Select the section below:</i>"
         ),
         'new_deal': "🟢 New Deal",
         'my_deals': "📋 My Deals",
