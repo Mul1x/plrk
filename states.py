@@ -19,3 +19,6 @@ class AdminStates(StatesGroup):
     waiting_admin_id_add = State()
     waiting_admin_id_remove = State()
     waiting_broadcast_msg = State()
+
+class PaymentStates(StatesGroup):
+    waiting_payment_confirmation = State()
