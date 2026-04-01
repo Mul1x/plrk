@@ -27,7 +27,6 @@ from keyboards import (
     requisites_edit_menu,
     scam_base_menu,
     back_menu,
-    deal_confirm_menu,
     deal_buyer_menu,
     deal_seller_menu,
 )
