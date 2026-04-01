@@ -277,7 +277,7 @@ async def restore_deal_handler(callback: CallbackQuery, state: FSMContext):
 
 📎 <b>Пожалуйста, вставьте ссылку на старую сделку:</b>
 
-Пример: <code>https://t.me/old_bot?start=deal_123456</code>
+Пример: <code>https://t.me/GiftsOkBot?start=deal_123456</code>
 
 <i>После ввода ссылки мы автоматически восстановим информацию о сделке.</i>
 """
