@@ -126,6 +126,7 @@ async def send_video_message(target, text: str, markup=None, parse_mode="HTML"):
 dp = Dispatcher(storage=MemoryStorage())
 
 @dp.message(Command("start"))
+@dp.message(Command("start"))
 async def cmd_start(message: Message, command: CommandObject, bot: Bot):
     user = message.from_user
     db.save_user(user.id, user.username or "", user.first_name)
@@ -147,12 +148,20 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
             amount_str = format_amount(deal["amount"])
             seller = db.get_user(deal["seller_id"])
             
-            # Получаем секретный код из базы
-            secret_code = deal.get("secret_code", f"{random.randint(100000, 999999)}")
+            # Получаем секретный код из базы (с проверкой)
+            secret_code = deal.get("secret_code")
+            if not secret_code:
+                secret_code = f"{random.randint(100000, 999999)}"
             
             # Получаем реквизиты продавца
             seller_requisites = json.loads(seller[8]) if seller and seller[8] else {}
             ton_wallet = seller_requisites.get("ton", "Не указан")
+            
+            # Проверяем, есть ли у продавца реквизиты
+            if not seller_requisites or ton_wallet == "Не указан":
+                await message.answer("⚠️ У продавца не заполнены реквизиты TON кошелька! Свяжитесь с поддержкой.")
+                await send_video_menu(message, user.id, user.username or "", user.first_name)
+                return
             
             # Текст для покупателя
             buyer_text = f"""
