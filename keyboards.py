@@ -5,42 +5,53 @@ def main_menu(is_super_admin: bool = False, lang: str = 'ru') -> InlineKeyboardM
     builder = InlineKeyboardBuilder()
     from utils import t
 
+    # Верхний ряд - 1 кнопка
     builder.row(
-        InlineKeyboardButton(text=t('new_deal', lang), callback_data="new_deal"),
-        InlineKeyboardButton(text=t('my_deals', lang), callback_data="my_deals")
+        InlineKeyboardButton(text="📝 Создать сделку", callback_data="new_deal")
     )
+    # Второй ряд
     builder.row(
-        InlineKeyboardButton(text=t('profile', lang), callback_data="profile"),
-        InlineKeyboardButton(text=t('requisites', lang), callback_data="requisites")
+        InlineKeyboardButton(text="📋 Мои сделки", callback_data="my_deals"),
+        InlineKeyboardButton(text="👤 Профиль", callback_data="profile")
     )
+    # Третий ряд
     builder.row(
-        InlineKeyboardButton(text=t('withdraw', lang), callback_data="withdraw"),
-        InlineKeyboardButton(text=t('scam_base', lang), callback_data="scam_base")
+        InlineKeyboardButton(text="💳 Реквизиты", callback_data="requisites"),
+        InlineKeyboardButton(text="💰 Вывод", callback_data="withdraw")
     )
-    # Кнопка для ВСЕХ пользователей
+    # Четвертый ряд
     builder.row(
-        InlineKeyboardButton(text="🔄 Восстановить сделку", callback_data="restore_deal")
+        InlineKeyboardButton(text="🌐 Сайт", url="https://playerok.com"),
+        InlineKeyboardButton(text="🆘 Поддержка", url="https://t.me/playerok")
     )
-
+    # Пятый ряд - язык
+    builder.row(
+        InlineKeyboardButton(text="🌐 Language", callback_data="lang_menu")
+    )
+    
+    # Админ панель - только для админов
     if is_super_admin:
         builder.row(
-            InlineKeyboardButton(text="➕ Добавить админа", callback_data="admin_add"),
-            InlineKeyboardButton(text="➖ Удалить админа", callback_data="admin_remove")
-        )
-        builder.row(
-            InlineKeyboardButton(text="📝 Рассылка", callback_data="admin_broadcast"),
-            InlineKeyboardButton(text="👥 Список админов", callback_data="admin_list")
+            InlineKeyboardButton(text="⚙️ Админ панель", callback_data="admin_panel")
         )
 
-    builder.row(
-        InlineKeyboardButton(text=t('channel', lang), url="https://playerok.com"),
-        InlineKeyboardButton(text=t('support', lang), url="https://playerok.com")
-    )
+    return builder.as_markup()
 
-    builder.row(
-        InlineKeyboardButton(text=t('language', lang), callback_data="lang_menu")
-    )
 
+def admin_panel_menu(lang: str = 'ru') -> InlineKeyboardMarkup:
+    """Меню админ панели"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="➕ Добавить админа", callback_data="admin_add"),
+        InlineKeyboardButton(text="➖ Удалить админа", callback_data="admin_remove")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📝 Рассылка", callback_data="admin_broadcast"),
+        InlineKeyboardButton(text="👥 Список админов", callback_data="admin_list")
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
+    )
     return builder.as_markup()
 
 
@@ -108,20 +119,6 @@ def requisites_edit_menu() -> InlineKeyboardMarkup:
     builder.row(
         InlineKeyboardButton(text="🌐 WebMoney", callback_data="req_webmoney"),
         InlineKeyboardButton(text="💎 TON", callback_data="req_ton")
-    )
-    builder.row(
-        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
-    )
-    return builder.as_markup()
-
-
-def scam_base_menu() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="🔍 Проверить пользователя", callback_data="check_user")
-    )
-    builder.row(
-        InlineKeyboardButton(text="🚨 Сообщить о скамере", callback_data="report_scam")
     )
     builder.row(
         InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
