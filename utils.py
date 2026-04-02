@@ -15,9 +15,11 @@ MESSAGES = {
         'main_menu': (
             "🎁 <b>PlayerOk</b>\n\n"
             "👋 Привет, <b>{name}</b>!\n\n"
-            "> <i>Комиссия сервиса: <b>3%</b></i>\n"
-            "> <i>Режим работы: <b>24/7</b></i>\n"
-            "> <i>Поддержка: <b>@PlayerOkGarants</b></i>\n\n"
+            "<blockquote>"
+            "<i>Комиссия сервиса: <b>3%</b></i>\n"
+            "<i>Режим работы: <b>24/7</b></i>\n"
+            "<i>Поддержка: <b>@PlayerOkGarants</b></i>"
+            "</blockquote>\n\n"
             "<i>Выберите нужный раздел ниже:</i>"
         ),
         'new_deal': "📝 Создать сделку",
@@ -65,9 +67,11 @@ MESSAGES = {
         'main_menu': (
             "🎁 <b>PlayerOk</b>\n\n"
             "👋 Hello, <b>{name}</b>!\n\n"
-            "> <i>Service commission: <b>3%</b></i>\n"
-            "> <i>Working hours: <b>24/7</b></i>\n"
-            "> <i>Support: <b>@PlayerOkGarants</b></i>\n\n"
+            "<blockquote>"
+            "<i>Service commission: <b>3%</b></i>\n"
+            "<i>Working hours: <b>24/7</b></i>\n"
+            "<i>Support: <b>@PlayerOkGarants</b></i>"
+            "</blockquote>\n\n"
             "<i>Select the section below:</i>"
         ),
         'new_deal': "📝 New Deal",
