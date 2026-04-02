@@ -13,22 +13,18 @@ def escape_html(text: str) -> str:
 MESSAGES = {
     'ru': {
         'main_menu': (
-            "🎁 <b>PlayerOk</b> — Мы специализированный сервис по обеспечению безопасности вне биржевых сделок.\n\n"
-            "<i>Автоматизированный алгоритм исполнения.\n"
-            "Скорость и автоматизация.\n"
-            "Удобный и быстрый вывод средств.</i>\n\n"
-            "• Комиссия сервиса: <b>3%</b>\n"
-            "• Режим работы: <b>24/7</b>\n\n"
-            "💰 <b>Выплачено всего:</b> <code>{total} RUB</code>\n\n"
-            "⭐ <b>Рейтинг:</b> {rating} <code>{val}/5</code>  •  🤝 <b>Сделок:</b> <code>{deals}</code>\n\n"
+            "🎁 <b>PlayerOk</b>\n\n"
+            "👋 Привет, <b>{name}</b>!\n\n"
+            "> <i>Комиссия сервиса: <b>3%</b></i>\n"
+            "> <i>Режим работы: <b>24/7</b></i>\n"
+            "> <i>Поддержка: <b>@PlayerOkGarants</b></i>\n\n"
             "<i>Выберите нужный раздел ниже:</i>"
         ),
-        'new_deal': "🟢 Новая сделка",
+        'new_deal': "📝 Создать сделку",
         'my_deals': "📋 Мои сделки",
         'profile': "👤 Профиль",
         'requisites': "💳 Реквизиты",
         'withdraw': "💰 Вывод",
-        'scam_base': "⚠️ Скам‑база",
         'channel': "🌐 Сайт",
         'support': "🆘 Поддержка",
         'language': "🌐 Язык",
@@ -60,30 +56,26 @@ MESSAGES = {
             "👤 <b>Покупатель:</b> <code>ID {buyer_id}</code>\n\n"
             "<i>✅ Деньги поступили — можете передавать товар или подарок.</i>\n\n"
             "🎁 <b>Инструкция по передаче подарка:</b>\n\n"
-            "1️⃣ Передайте подарок гаранту: @PlayerokGarants\n"
+            "1️⃣ Передайте подарок гаранту: @PlayerOkGarants\n"
             "2️⃣ Передача подтверждается автоматически\n"
             "3️⃣ После подтверждения средства зачислятся на баланс"
         ),
     },
     'en': {
         'main_menu': (
-            "🎁 <b>PlayerOk</b> — We are a specialized service for ensuring security of off-exchange deals.\n\n"
-            "<i>Automated execution algorithm.\n"
-            "Speed and automation.\n"
-            "Convenient and fast withdrawals.</i>\n\n"
-            "• Service commission: <b>3%</b>\n"
-            "• Working hours: <b>24/7</b>\n\n"
-            "💰 <b>Total paid out:</b> <code>{total} RUB</code>\n\n"
-            "⭐ <b>Rating:</b> {rating} <code>{val}/5</code>  •  🤝 <b>Deals:</b> <code>{deals}</code>\n\n"
+            "🎁 <b>PlayerOk</b>\n\n"
+            "👋 Hello, <b>{name}</b>!\n\n"
+            "> <i>Service commission: <b>3%</b></i>\n"
+            "> <i>Working hours: <b>24/7</b></i>\n"
+            "> <i>Support: <b>@PlayerOkGarants</b></i>\n\n"
             "<i>Select the section below:</i>"
         ),
-        'new_deal': "🟢 New Deal",
+        'new_deal': "📝 New Deal",
         'my_deals': "📋 My Deals",
         'profile': "👤 Profile",
         'requisites': "💳 Requisites",
         'withdraw': "💰 Withdraw",
-        'scam_base': "⚠️ Scam Base",
-        'channel': "📢 Channel",
+        'channel': "🌐 Website",
         'support': "🆘 Support",
         'language': "🌐 Language",
         'select_type': "📦 <b>Select deal type:</b>",
@@ -114,7 +106,7 @@ MESSAGES = {
             "👤 <b>Buyer:</b> <code>ID {buyer_id}</code>\n\n"
             "<i>✅ Money received — you can transfer the item or gift.</i>\n\n"
             "🎁 <b>Gift transfer instructions:</b>\n\n"
-            "1️⃣ Transfer the gift to the guarantor: @PlayerokGarants\n"
+            "1️⃣ Transfer the gift to the guarantor: @PlayerOkGarants\n"
             "2️⃣ Transfer is confirmed automatically\n"
             "3️⃣ After confirmation, funds will be credited to your balance"
         ),
