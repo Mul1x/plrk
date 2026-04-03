@@ -1,9 +1,11 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-def main_menu(is_super_admin: bool = False, lang: str = 'ru') -> InlineKeyboardMarkup:
+
+def main_menu(user_id: int, is_super_admin: bool = False, lang: str = 'ru') -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     from utils import t
+    from database import db
 
     builder.row(
         InlineKeyboardButton(text="📝 Создать сделку", callback_data="new_deal")
@@ -17,8 +19,7 @@ def main_menu(is_super_admin: bool = False, lang: str = 'ru') -> InlineKeyboardM
         InlineKeyboardButton(text="💰 Вывод", callback_data="withdraw")
     )
     
-    # Кнопка Мои подписки - показываем если есть активная подписка ИЛИ админ
-    from database import db
+    # Показываем Мои подписки только если есть активная подписка ИЛИ админ
     if db.check_subscription_active(user_id) or is_super_admin:
         builder.row(
             InlineKeyboardButton(text="📜 Мои подписки", callback_data="my_subscriptions")
@@ -38,7 +39,6 @@ def main_menu(is_super_admin: bool = False, lang: str = 'ru') -> InlineKeyboardM
         )
 
     return builder.as_markup()
-
 
 def subscription_menu() -> InlineKeyboardMarkup:
     """Меню выбора подписки"""
