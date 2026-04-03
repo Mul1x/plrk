@@ -5,13 +5,9 @@ class DealStates(StatesGroup):
     waiting_description = State()
     waiting_amount = State()
     waiting_currency = State()
-    waiting_restore_link = State()  # ДЛЯ ВОССТАНОВЛЕНИЯ СДЕЛКИ
 
 class RequisitesStates(StatesGroup):
     waiting_value = State()
-
-class ScamStates(StatesGroup):
-    waiting_username = State()
 
 class WithdrawStates(StatesGroup):
     waiting_amount = State()
@@ -23,3 +19,6 @@ class AdminStates(StatesGroup):
 
 class PaymentStates(StatesGroup):
     waiting_payment_confirmation = State()
+
+class SubscriptionStates(StatesGroup):
+    selecting_plan = State()
