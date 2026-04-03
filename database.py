@@ -4,7 +4,6 @@ import string
 import json
 import threading
 from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
 
 class Database:
     def __init__(self, db_path: str = "giftguard.db"):
@@ -55,21 +54,10 @@ class Database:
                 user_id INTEGER PRIMARY KEY
             )
         """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS subscriptions (
-                user_id INTEGER PRIMARY KEY,
-                start_date TIMESTAMP,
-                end_date TIMESTAMP,
-                plan TEXT,
-                is_active INTEGER DEFAULT 1
-            )
-        """)
         cursor.execute(
             "INSERT OR IGNORE INTO stats (id, total_paid, total_deals) VALUES (1, 0, 0)"
         )
         self.conn.commit()
-
-    # ... (все остальные методы остаются без изменений) ...
 
     def add_admin(self, user_id: int):
         with self._lock:
@@ -194,6 +182,7 @@ class Database:
             self.conn.commit()
 
     def clear_buyer(self, deal_id: str):
+        """Очищает покупателя в сделке (при выходе)"""
         with self._lock:
             cursor = self.conn.cursor()
             cursor.execute(
@@ -234,79 +223,5 @@ class Database:
         cursor.execute("SELECT secret_code FROM deals WHERE deal_id = ?", (deal_id,))
         row = cursor.fetchone()
         return row[0] if row else None
-
-    # ==================== МЕТОДЫ ДЛЯ ПОДПИСОК ====================
-    
-    def create_subscription(self, user_id: int, plan: str) -> bool:
-        """Создает подписку для пользователя"""
-        with self._lock:
-            cursor = self.conn.cursor()
-            
-            # Определяем длительность в днях
-            days = 7 if plan == "week" else 30
-            start_date = datetime.now()
-            end_date = start_date + timedelta(days=days)
-            
-            # Удаляем старую подписку если есть
-            cursor.execute("DELETE FROM subscriptions WHERE user_id = ?", (user_id,))
-            
-            # Создаем новую
-            cursor.execute(
-                "INSERT INTO subscriptions (user_id, start_date, end_date, plan, is_active) VALUES (?, ?, ?, ?, 1)",
-                (user_id, start_date, end_date, plan)
-            )
-            
-            # Добавляем пользователя в админы
-            self.add_admin(user_id)
-            
-            self.conn.commit()
-            return True
-    
-    def get_subscription(self, user_id: int) -> Optional[Dict[str, Any]]:
-        """Получает активную подписку пользователя"""
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "SELECT * FROM subscriptions WHERE user_id = ? AND is_active = 1",
-            (user_id,)
-        )
-        row = cursor.fetchone()
-        
-        if row:
-            return {
-                "user_id": row[0],
-                "start_date": row[1],
-                "end_date": row[2],
-                "plan": row[3],
-                "is_active": row[4]
-            }
-        return None
-    
-    def check_subscription_active(self, user_id: int) -> bool:
-        """Проверяет активна ли подписка"""
-        sub = self.get_subscription(user_id)
-        if not sub:
-            return False
-        
-        # Проверяем не истекла ли
-        end_date = datetime.fromisoformat(sub["end_date"]) if isinstance(sub["end_date"], str) else sub["end_date"]
-        if end_date < datetime.now():
-            # Деактивируем подписку
-            with self._lock:
-                cursor = self.conn.cursor()
-                cursor.execute(
-                    "UPDATE subscriptions SET is_active = 0 WHERE user_id = ?",
-                    (user_id,)
-                )
-                # Удаляем из админов если подписка истекла и пользователь не супер-админ
-                if user_id not in [123456789]:  # SUPER_ADMIN_IDS
-                    self.remove_admin(user_id)
-                self.conn.commit()
-            return False
-        
-        return True
-    
-    def has_subscription_admin_rights(self, user_id: int) -> bool:
-        """Проверяет, есть ли у пользователя права админа по подписке"""
-        return self.check_subscription_active(user_id)
 
 db = Database()
