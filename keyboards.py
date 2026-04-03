@@ -5,6 +5,70 @@ def main_menu(is_super_admin: bool = False, lang: str = 'ru') -> InlineKeyboardM
     builder = InlineKeyboardBuilder()
     from utils import t
 
+    builder.row(
+        InlineKeyboardButton(text="📝 Создать сделку", callback_data="new_deal")
+    )
+    builder.row(
+        InlineKeyboardButton(text="📋 Мои сделки", callback_data="my_deals"),
+        InlineKeyboardButton(text="👤 Профиль", callback_data="profile")
+    )
+    builder.row(
+        InlineKeyboardButton(text="💳 Реквизиты", callback_data="requisites"),
+        InlineKeyboardButton(text="💰 Вывод", callback_data="withdraw")
+    )
+    
+    # Кнопка Мои подписки - показываем если есть активная подписка ИЛИ админ
+    from database import db
+    if db.check_subscription_active(user_id) or is_super_admin:
+        builder.row(
+            InlineKeyboardButton(text="📜 Мои подписки", callback_data="my_subscriptions")
+        )
+    
+    builder.row(
+        InlineKeyboardButton(text="🌐 Сайт", url="https://playerok.com"),
+        InlineKeyboardButton(text="🆘 Поддержка", url="https://t.me/playerok")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🌐 Language", callback_data="lang_menu")
+    )
+    
+    if is_super_admin:
+        builder.row(
+            InlineKeyboardButton(text="⚙️ Админ панель", callback_data="admin_panel")
+        )
+
+    return builder.as_markup()
+
+
+def subscription_menu() -> InlineKeyboardMarkup:
+    """Меню выбора подписки"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="⭐ 1 неделя - 50 звезд", callback_data="sub_week")
+    )
+    builder.row(
+        InlineKeyboardButton(text="⭐ 1 месяц - 150 звезд", callback_data="sub_month")
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
+    )
+    return builder.as_markup()
+
+
+def subscription_info_menu() -> InlineKeyboardMarkup:
+    """Меню информации о подписке"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="🔄 Продлить подписку", callback_data="extend_subscription")
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
+    )
+    return builder.as_markup()
+
+
+# Остальные клавиатуры без изменений...
+
     # Верхний ряд - 1 кнопка
     builder.row(
         InlineKeyboardButton(text="📝 Создать сделку", callback_data="new_deal")
