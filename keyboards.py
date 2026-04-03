@@ -1,121 +1,46 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-
-def main_menu(user_id: int, is_super_admin: bool = False, lang: str = 'ru') -> InlineKeyboardMarkup:
+def main_menu(is_super_admin: bool = False, lang: str = 'ru') -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     from utils import t
-    from database import db
 
     builder.row(
-        InlineKeyboardButton(text="📝 Создать сделку", callback_data="new_deal")
+        InlineKeyboardButton(text=t('new_deal', lang), callback_data="new_deal"),
+        InlineKeyboardButton(text=t('my_deals', lang), callback_data="my_deals")
     )
     builder.row(
-        InlineKeyboardButton(text="📋 Мои сделки", callback_data="my_deals"),
-        InlineKeyboardButton(text="👤 Профиль", callback_data="profile")
+        InlineKeyboardButton(text=t('profile', lang), callback_data="profile"),
+        InlineKeyboardButton(text=t('requisites', lang), callback_data="requisites")
     )
     builder.row(
-        InlineKeyboardButton(text="💳 Реквизиты", callback_data="requisites"),
-        InlineKeyboardButton(text="💰 Вывод", callback_data="withdraw")
+        InlineKeyboardButton(text=t('withdraw', lang), callback_data="withdraw"),
+        InlineKeyboardButton(text=t('scam_base', lang), callback_data="scam_base")
     )
-    
-    # Показываем Мои подписки только если есть активная подписка ИЛИ админ
-    if db.check_subscription_active(user_id) or is_super_admin:
-        builder.row(
-            InlineKeyboardButton(text="📜 Мои подписки", callback_data="my_subscriptions")
-        )
-    
+    # Кнопка для ВСЕХ пользователей
     builder.row(
-        InlineKeyboardButton(text="🌐 Сайт", url="https://playerok.com"),
-        InlineKeyboardButton(text="🆘 Поддержка", url="https://t.me/playerok")
+        InlineKeyboardButton(text="🔄 Восстановить сделку", callback_data="restore_deal")
     )
-    builder.row(
-        InlineKeyboardButton(text="🌐 Language", callback_data="lang_menu")
-    )
-    
+
     if is_super_admin:
         builder.row(
-            InlineKeyboardButton(text="⚙️ Админ панель", callback_data="admin_panel")
+            InlineKeyboardButton(text="➕ Добавить админа", callback_data="admin_add"),
+            InlineKeyboardButton(text="➖ Удалить админа", callback_data="admin_remove")
         )
-
-    return builder.as_markup()
-
-def subscription_menu() -> InlineKeyboardMarkup:
-    """Меню выбора подписки"""
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="⭐ 1 неделя - 50 звезд", callback_data="sub_week")
-    )
-    builder.row(
-        InlineKeyboardButton(text="⭐ 1 месяц - 150 звезд", callback_data="sub_month")
-    )
-    builder.row(
-        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
-    )
-    return builder.as_markup()
-
-
-def subscription_info_menu() -> InlineKeyboardMarkup:
-    """Меню информации о подписке"""
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="🔄 Продлить подписку", callback_data="extend_subscription")
-    )
-    builder.row(
-        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
-    )
-    return builder.as_markup()
-
-
-# Остальные клавиатуры без изменений...
-
-    # Верхний ряд - 1 кнопка
-    builder.row(
-        InlineKeyboardButton(text="📝 Создать сделку", callback_data="new_deal")
-    )
-    # Второй ряд
-    builder.row(
-        InlineKeyboardButton(text="📋 Мои сделки", callback_data="my_deals"),
-        InlineKeyboardButton(text="👤 Профиль", callback_data="profile")
-    )
-    # Третий ряд
-    builder.row(
-        InlineKeyboardButton(text="💳 Реквизиты", callback_data="requisites"),
-        InlineKeyboardButton(text="💰 Вывод", callback_data="withdraw")
-    )
-    # Четвертый ряд
-    builder.row(
-        InlineKeyboardButton(text="🌐 Сайт", url="https://playerok.com"),
-        InlineKeyboardButton(text="🆘 Поддержка", url="https://t.me/playerok")
-    )
-    # Пятый ряд - язык
-    builder.row(
-        InlineKeyboardButton(text="🌐 Language", callback_data="lang_menu")
-    )
-    
-    # Админ панель - только для админов
-    if is_super_admin:
         builder.row(
-            InlineKeyboardButton(text="⚙️ Админ панель", callback_data="admin_panel")
+            InlineKeyboardButton(text="📝 Рассылка", callback_data="admin_broadcast"),
+            InlineKeyboardButton(text="👥 Список админов", callback_data="admin_list")
         )
 
-    return builder.as_markup()
+    builder.row(
+        InlineKeyboardButton(text=t('channel', lang), url="https://t.me/playerok"),
+        InlineKeyboardButton(text=t('support', lang), url="https://t.me/playerok")
+    )
 
+    builder.row(
+        InlineKeyboardButton(text=t('language', lang), callback_data="lang_menu")
+    )
 
-def admin_panel_menu(lang: str = 'ru') -> InlineKeyboardMarkup:
-    """Меню админ панели"""
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="➕ Добавить админа", callback_data="admin_add"),
-        InlineKeyboardButton(text="➖ Удалить админа", callback_data="admin_remove")
-    )
-    builder.row(
-        InlineKeyboardButton(text="📝 Рассылка", callback_data="admin_broadcast"),
-        InlineKeyboardButton(text="👥 Список админов", callback_data="admin_list")
-    )
-    builder.row(
-        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
-    )
     return builder.as_markup()
 
 
@@ -183,6 +108,20 @@ def requisites_edit_menu() -> InlineKeyboardMarkup:
     builder.row(
         InlineKeyboardButton(text="🌐 WebMoney", callback_data="req_webmoney"),
         InlineKeyboardButton(text="💎 TON", callback_data="req_ton")
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
+    )
+    return builder.as_markup()
+
+
+def scam_base_menu() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="🔍 Проверить пользователя", callback_data="check_user")
+    )
+    builder.row(
+        InlineKeyboardButton(text="🚨 Сообщить о скамере", callback_data="report_scam")
     )
     builder.row(
         InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
