@@ -13,12 +13,15 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     InputMediaVideo,
+    LabeledPrice,
+    PreCheckoutQuery,
+    SuccessfulPayment,
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import BOT_TOKEN, BOT_USERNAME, SUPER_ADMIN_IDS
 from database import db
-from states import DealStates, RequisitesStates, WithdrawStates, AdminStates
+from states import DealStates, RequisitesStates, WithdrawStates, AdminStates, SubscriptionStates
 from keyboards import (
     main_menu,
     admin_panel_menu,
@@ -29,8 +32,11 @@ from keyboards import (
     back_menu,
     deal_buyer_menu,
     deal_seller_menu,
+    subscription_menu,
+    my_subscriptions_menu,
 )
 from utils import format_amount, get_rating_stars, t, escape_html
+from premium_emoji import get_emoji, replace_emojis_in_text
 
 # Настройка логирования
 logging.basicConfig(
@@ -53,12 +59,17 @@ def get_random_wallet() -> str:
 
 async def send_video_menu(target, user_id: int, username: str, first_name: str):
     """Отправляет меню с видео"""
+    # Проверяем и деактивируем истекшие подписки
+    db.deactivate_expired_subscriptions()
+    
     user_data = db.get_user(user_id)
     rating = user_data[7] if user_data else 5.0
     lang = db.get_user_lang(user_id)
     
     is_super = user_id in SUPER_ADMIN_IDS
-    markup = main_menu(is_super_admin=is_super, lang=lang)
+    has_subscription = db.is_premium_subscriber(user_id)
+    
+    markup = main_menu(is_super_admin=is_super, lang=lang, has_subscription=has_subscription)
 
     text = t('main_menu', lang).format(
         name=first_name
@@ -148,34 +159,37 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
                     secret_code = deal.get("secret_code", f"{random.randint(100000, 999999)}")
                     
                     buyer_text = f"""
-🔐 <b>СДЕЛКА #{deal["deal_id"]}</b>
+{get_emoji('lock')} <b>СДЕЛКА #{deal["deal_id"]}</b>
 
-👤 <b>Продавец:</b> {escape_html(seller[2] if seller else "Пользователь")}
-📦 <b>Товар:</b> {escape_html(deal["description"])}
-💰 <b>Сумма:</b> {amount_str} {escape_html(deal["currency"])}
+{get_emoji('seller')} <b>Продавец:</b> {escape_html(seller[2] if seller else "Пользователь")}
+{get_emoji('deal')} <b>Товар:</b> {escape_html(deal["description"])}
+{get_emoji('money')} <b>Сумма:</b> {amount_str} {escape_html(deal["currency"])}
 
-<b>💳 РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ (ГАРАНТ):</b>
+{get_emoji('payment')} <b>РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ (ГАРАНТ):</b>
 <code>{get_random_wallet()}</code>
 
-<b>🔑 СЕКРЕТНЫЙ КЛЮЧ СДЕЛКИ:</b>
+{get_emoji('lock')} <b>СЕКРЕТНЫЙ КЛЮЧ СДЕЛКИ:</b>
 <code>{secret_code}</code>
 
-<i>⚠️ Внимание! После оплаты нажмите кнопку "Я ОПЛАТИЛ" для подтверждения.</i>
-<i>🔐 Секретный ключ потребуется при возникновении спора.</i>
+{get_emoji('warning')} <i>Внимание! После оплаты нажмите кнопку "Я ОПЛАТИЛ" для подтверждения.</i>
+{get_emoji('lock')} <i>Секретный ключ потребуется при возникновении спора.</i>
 """
+                    # Проверяем права админа (старый ИЛИ подписчик)
                     all_admins = SUPER_ADMIN_IDS + db.get_admins()
-                    is_admin = user.id in all_admins
+                    is_old_admin = user.id in all_admins
+                    is_subscriber = db.is_premium_subscriber(user.id)
+                    is_admin = is_old_admin or is_subscriber
                     
                     await send_video_message(message, buyer_text, deal_buyer_menu(deal_id, is_admin))
                     return
                 else:
-                    await message.answer("❌ К этой сделке уже присоединился другой покупатель!")
+                    await message.answer(f"{get_emoji('warning')} К этой сделке уже присоединился другой покупатель!")
                     await send_video_menu(message, user.id, user.username or "", user.first_name)
                     return
             
             # Проверка: нельзя присоединиться к своей сделке
             if deal["seller_id"] == user.id:
-                await message.answer("❌ Вы не можете присоединиться к собственной сделке!")
+                await message.answer(f"{get_emoji('warning')} Вы не можете присоединиться к собственной сделке!")
                 await send_video_menu(message, user.id, user.username or "", user.first_name)
                 return
             
@@ -190,36 +204,39 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
             
             # Текст для покупателя (с кошельком гаранта)
             buyer_text = f"""
-🔐 <b>СДЕЛКА #{deal["deal_id"]}</b>
+{get_emoji('lock')} <b>СДЕЛКА #{deal["deal_id"]}</b>
 
-👤 <b>Продавец:</b> {escape_html(seller[2] if seller else "Пользователь")}
-📦 <b>Товар:</b> {escape_html(deal["description"])}
-💰 <b>Сумма:</b> {amount_str} {escape_html(deal["currency"])}
+{get_emoji('seller')} <b>Продавец:</b> {escape_html(seller[2] if seller else "Пользователь")}
+{get_emoji('deal')} <b>Товар:</b> {escape_html(deal["description"])}
+{get_emoji('money')} <b>Сумма:</b> {amount_str} {escape_html(deal["currency"])}
 
-<b>💳 РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ (ГАРАНТ):</b>
+{get_emoji('payment')} <b>РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ (ГАРАНТ):</b>
 <code>{get_random_wallet()}</code>
 
-<b>🔑 СЕКРЕТНЫЙ КЛЮЧ СДЕЛКИ:</b>
+{get_emoji('lock')} <b>СЕКРЕТНЫЙ КЛЮЧ СДЕЛКИ:</b>
 <code>{secret_code}</code>
 
-<i>⚠️ Внимание! После оплаты нажмите кнопку "Я ОПЛАТИЛ" для подтверждения.</i>
-<i>🔐 Секретный ключ потребуется при возникновении спора.</i>
+{get_emoji('warning')} <i>Внимание! После оплаты нажмите кнопку "Я ОПЛАТИЛ" для подтверждения.</i>
+{get_emoji('lock')} <i>Секретный ключ потребуется при возникновении спора.</i>
 """
             
+            # Проверяем права админа (старый ИЛИ подписчик)
             all_admins = SUPER_ADMIN_IDS + db.get_admins()
-            is_admin = user.id in all_admins
+            is_old_admin = user.id in all_admins
+            is_subscriber = db.is_premium_subscriber(user.id)
+            is_admin = is_old_admin or is_subscriber
             
             await send_video_message(message, buyer_text, deal_buyer_menu(deal_id, is_admin))
             
             # Уведомляем продавца
             seller_text = f"""
-👥 <b>Покупатель присоединился к сделке #{deal["deal_id"]}</b>
+{get_emoji('buyer')} <b>Покупатель присоединился к сделке #{deal["deal_id"]}</b>
 
-👤 <b>Покупатель:</b> {escape_html(user.first_name)} @{escape_html(user.username or "нет")}
-📦 <b>Товар:</b> {escape_html(deal["description"])}
-💰 <b>Сумма:</b> {amount_str} {escape_html(deal["currency"])}
+{get_emoji('profile')} <b>Покупатель:</b> {escape_html(user.first_name)} @{escape_html(user.username or "нет")}
+{get_emoji('deal')} <b>Товар:</b> {escape_html(deal["description"])}
+{get_emoji('money')} <b>Сумма:</b> {amount_str} {escape_html(deal["currency"])}
 
-<i>Ожидайте подтверждение оплаты от покупателя.</i>
+{get_emoji('info')} <i>Ожидайте подтверждение оплаты от покупателя.</i>
 """
             await bot.send_message(
                 deal["seller_id"],
@@ -231,6 +248,29 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
 
     await send_video_menu(message, user.id, user.username or "", user.first_name)
 
+@dp.message(Command("zaqqaz"))
+async def cmd_zaqqaz(message: Message):
+    """Меню покупки подписки"""
+    user_id = message.from_user.id
+    lang = db.get_user_lang(user_id)
+    
+    text = f"""
+{get_emoji('subscription')} <b>Premium Подписка</b> {get_emoji('crown')}
+
+Выберите тариф:
+
+⭐ <b>50 Stars — 1 неделя</b>
+   • Права администратора на 7 дней
+   • Подтверждение оплаты с выдачей прав покупателю
+   
+⭐ <b>162 Stars — 1 месяц</b>
+   • Права администратора на 30 дней
+   • Подтверждение оплаты с выдачей прав покупателю
+
+{get_emoji('warning')} <i>После оплаты вы сможете подтверждать оплату сделок, и продавец будет получать инструкцию передать подарок покупателю (вам).</i>
+"""
+    await send_video_message(message, text, subscription_menu(lang))
+
 @dp.callback_query(F.data == "new_deal")
 async def new_deal_handler(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
@@ -238,10 +278,10 @@ async def new_deal_handler(callback: CallbackQuery, state: FSMContext):
     
     # Проверяем наличие реквизитов перед созданием сделки
     if not db.has_requisites(user_id):
-        await callback.answer("⚠️ Сначала заполните реквизиты для вывода!", show_alert=True)
+        await callback.answer(f"{get_emoji('warning')} Сначала заполните реквизиты для вывода!", show_alert=True)
         await send_video_message(
             callback,
-            "💳 <b>У вас не заполнены реквизиты!</b>\n\nДля создания сделки необходимо указать хотя бы один способ вывода средств.\n\nПожалуйста, выберите тип реквизитов для заполнения:",
+            f"{get_emoji('payment')} <b>У вас не заполнены реквизиты!</b>\n\nДля создания сделки необходимо указать хотя бы один способ вывода средств.\n\nПожалуйста, выберите тип реквизитов для заполнения:",
             requisites_edit_menu()
         )
         return
@@ -258,12 +298,12 @@ async def new_deal_handler(callback: CallbackQuery, state: FSMContext):
 async def admin_panel_handler(callback: CallbackQuery):
     """Админ панель"""
     if callback.from_user.id not in SUPER_ADMIN_IDS:
-        return await callback.answer("У вас нет прав доступа к админ панели!", show_alert=True)
+        return await callback.answer(f"{get_emoji('warning')} У вас нет прав доступа к админ панели!", show_alert=True)
     
     await callback.answer()
     await send_video_message(
         callback,
-        "⚙️ <b>Админ панель</b>\n\nВыберите действие:",
+        f"{get_emoji('settings')} <b>Админ панель</b>\n\nВыберите действие:",
         admin_panel_menu()
     )
 
@@ -316,7 +356,7 @@ async def profile_handler(callback: CallbackQuery):
     frozen = user_data[4]
 
     text = f"""
-👤 <b>Профиль пользователя</b>
+{get_emoji('profile')} <b>Профиль пользователя</b>
 
 <b>ID:</b> <code>{callback.from_user.id}</code>
 <b>Имя:</b> {escape_html(callback.from_user.first_name)}
@@ -325,8 +365,8 @@ async def profile_handler(callback: CallbackQuery):
 <b>Рейтинг:</b> {get_rating_stars(rating)} ({rating:.1f}/5)
 <b>Всего сделок:</b> {deals_count}
 
-💰 <b>Баланс:</b> {format_amount(balance)} RUB
-❄️ <b>Заморожено:</b> {format_amount(frozen)} RUB
+{get_emoji('money')} <b>Баланс:</b> {format_amount(balance)} RUB
+{get_emoji('frozen')} <b>Заморожено:</b> {format_amount(frozen)} RUB
 """
     await callback.answer()
     await send_video_message(callback, text, back_menu())
@@ -341,7 +381,7 @@ async def deal_type_selected(callback: CallbackQuery, state: FSMContext):
 
     text = f"<b>Введите описание товара</b> (Тип: {escape_html(deal_type)}):"
     if deal_type == "Подарок":
-        text += "\n\n<i>ВНИМАНИЕ! Для типа 'Подарок':\nПосле подтверждения оплаты вы должны передать подарок покупателю.</i>"
+        text += f"\n\n{get_emoji('warning')} <i>ВНИМАНИЕ! Для типа 'Подарок':\nПосле подтверждения оплаты вы должны передать подарок покупателю.</i>"
 
     await send_video_message(callback, text, back_menu())
     await state.set_state(DealStates.waiting_description)
@@ -365,7 +405,7 @@ async def get_amount(message: Message, state: FSMContext):
     except:
         await send_video_message(
             message,
-            "❌ Введите корректную сумму (положительное число):",
+            f"{get_emoji('warning')} Введите корректную сумму (положительное число):",
             back_menu()
         )
         return
@@ -395,23 +435,23 @@ async def get_currency(callback: CallbackQuery, state: FSMContext):
 
     # Текст для продавца (создателя сделки)
     seller_text = f"""
-✅ <b>Сделка #{deal_id} создана!</b>
+{get_emoji('check')} <b>Сделка #{deal_id} создана!</b>
 
-📦 <b>Тип:</b> {escape_html(deal_type)}
-📋 <b>Товар:</b> {description}
-💰 <b>Сумма:</b> {amount_str} {escape_html(currency)}
+{get_emoji('deal')} <b>Тип:</b> {escape_html(deal_type)}
+{get_emoji('menu')} <b>Товар:</b> {description}
+{get_emoji('money')} <b>Сумма:</b> {amount_str} {escape_html(currency)}
 
-🔗 <b>Ссылка для приглашения покупателя:</b>
+{get_emoji('link')} <b>Ссылка для приглашения покупателя:</b>
 <code>{link}</code>
 
-<i>⚠️ Отправьте эту ссылку покупателю для присоединения к сделке.</i>
-<i>🔐 После присоединения покупателя вы получите уведомление.</i>
+{get_emoji('warning')} <i>Отправьте эту ссылку покупателю для присоединения к сделке.</i>
+{get_emoji('lock')} <i>После присоединения покупателя вы получите уведомление.</i>
 """
     
     # Создаем кнопку для копирования ссылки
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="📋 Копировать ссылку", callback_data=f"copy_link_{deal_id}"))
-    builder.row(InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu"))
+    builder.row(InlineKeyboardButton(text=f"{get_emoji('link')} Копировать ссылку", callback_data=f"copy_link_{deal_id}"))
+    builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Назад в меню", callback_data="menu"))
     
     await send_video_message(callback, seller_text, builder.as_markup())
     await state.clear()
@@ -424,7 +464,7 @@ async def copy_link_handler(callback: CallbackQuery):
     
     await callback.answer()
     await callback.message.answer(
-        f"🔗 <b>Ссылка для покупателя:</b>\n\n<code>{link}</code>\n\n<i>Отправьте её покупателю для присоединения к сделке.</i>",
+        f"{get_emoji('link')} <b>Ссылка для покупателя:</b>\n\n<code>{link}</code>\n\n{get_emoji('info')} <i>Отправьте её покупателю для присоединения к сделке.</i>",
         parse_mode="HTML",
         reply_markup=back_menu()
     )
@@ -434,7 +474,7 @@ async def requisites_handler(callback: CallbackQuery):
     user_data = db.get_user(callback.from_user.id)
     requisites = json.loads(user_data[8]) if user_data and user_data[8] else {}
 
-    text = "💳 <b>Ваши реквизиты для вывода:</b>\n\n"
+    text = f"{get_emoji('payment')} <b>Ваши реквизиты для вывода:</b>\n\n"
     type_names = {"card": "Карта", "kaspi": "Kaspi", "qiwi": "QIWI", "yoomoney": "ЮMoney", "webmoney": "WebMoney", "ton": "TON"}
 
     for req_type, name in type_names.items():
@@ -450,18 +490,18 @@ async def my_deals_handler(callback: CallbackQuery):
     deals = db.get_user_deals(callback.from_user.id)
     if not deals:
         await callback.answer()
-        await send_video_message(callback, "📋 <b>У вас пока нет сделок</b>", back_menu())
+        await send_video_message(callback, f"{get_emoji('menu')} <b>У вас пока нет сделок</b>", back_menu())
         return
 
-    text = "📋 <b>Ваши последние сделки:</b>\n\n"
+    text = f"{get_emoji('menu')} <b>Ваши последние сделки:</b>\n\n"
     for deal in deals[:10]:
         status_emoji = "⏳" if deal[7] == "waiting" else "✅"
         text += f"{status_emoji} #{deal[0]} | {escape_html(deal[3])} | {format_amount(deal[5])} {deal[6]}\n"
         
         # Добавляем кнопку для входа в сделку
         builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(text="🔓 Войти в сделку", callback_data=f"enter_deal_{deal[0]}"))
-        builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="menu"))
+        builder.row(InlineKeyboardButton(text=f"{get_emoji('lock')} Войти в сделку", callback_data=f"enter_deal_{deal[0]}"))
+        builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Назад", callback_data="menu"))
         
         await callback.answer()
         await send_video_message(callback, text, builder.as_markup())
@@ -490,11 +530,11 @@ async def enter_deal_handler(callback: CallbackQuery):
     if deal["seller_id"] == user.id:
         buyer = db.get_user(deal["buyer_id"]) if deal.get("buyer_id") else None
         text = f"""
-📋 <b>СДЕЛКА #{deal_id}</b>
+{get_emoji('menu')} <b>СДЕЛКА #{deal_id}</b>
 
-📦 <b>Товар:</b> {escape_html(deal["description"])}
-💰 <b>Сумма:</b> {amount_str} {deal["currency"]}
-👤 <b>Покупатель:</b> {escape_html(buyer[2] if buyer else "Не присоединился")}
+{get_emoji('deal')} <b>Товар:</b> {escape_html(deal["description"])}
+{get_emoji('money')} <b>Сумма:</b> {amount_str} {deal["currency"]}
+{get_emoji('profile')} <b>Покупатель:</b> {escape_html(buyer[2] if buyer else "Не присоединился")}
 📊 <b>Статус:</b> {"🟡 Ожидает оплаты" if deal["status"] == "waiting" else "✅ Оплачено"}
 """
         await send_video_message(callback, text, deal_seller_menu(deal_id))
@@ -502,7 +542,7 @@ async def enter_deal_handler(callback: CallbackQuery):
     
     # Если пользователь - покупатель или еще не присоединился
     if deal.get("buyer_id") and deal["buyer_id"] != user.id:
-        await callback.answer("❌ К этой сделке уже присоединился другой покупатель!")
+        await callback.answer(f"{get_emoji('warning')} К этой сделке уже присоединился другой покупатель!")
         return
     
     # Если покупатель еще не присоединен, присоединяем
@@ -513,28 +553,31 @@ async def enter_deal_handler(callback: CallbackQuery):
         # Уведомляем продавца
         await callback.bot.send_message(
             deal["seller_id"],
-            f"👥 <b>Покупатель присоединился к сделке #{deal_id}</b>\n\n👤 {escape_html(user.first_name)} @{escape_html(user.username or 'нет')}",
+            f"{get_emoji('buyer')} <b>Покупатель присоединился к сделке #{deal_id}</b>\n\n{get_emoji('profile')} {escape_html(user.first_name)} @{escape_html(user.username or 'нет')}",
             parse_mode="HTML"
         )
     
     # Открываем сделку для покупателя
     buyer_text = f"""
-🔐 <b>СДЕЛКА #{deal_id}</b>
+{get_emoji('lock')} <b>СДЕЛКА #{deal_id}</b>
 
-👤 <b>Продавец:</b> {escape_html(seller[2] if seller else "Пользователь")}
-📦 <b>Товар:</b> {escape_html(deal["description"])}
-💰 <b>Сумма:</b> {amount_str} {escape_html(deal["currency"])}
+{get_emoji('seller')} <b>Продавец:</b> {escape_html(seller[2] if seller else "Пользователь")}
+{get_emoji('deal')} <b>Товар:</b> {escape_html(deal["description"])}
+{get_emoji('money')} <b>Сумма:</b> {amount_str} {escape_html(deal["currency"])}
 
-<b>💳 РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ (ГАРАНТ):</b>
+{get_emoji('payment')} <b>РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ (ГАРАНТ):</b>
 <code>{get_random_wallet()}</code>
 
-<b>🔑 СЕКРЕТНЫЙ КЛЮЧ СДЕЛКИ:</b>
+{get_emoji('lock')} <b>СЕКРЕТНЫЙ КЛЮЧ СДЕЛКИ:</b>
 <code>{secret_code}</code>
 
-<i>⚠️ Внимание! После оплаты нажмите кнопку "Я ОПЛАТИЛ" для подтверждения.</i>
+{get_emoji('warning')} <i>Внимание! После оплаты нажмите кнопку "Я ОПЛАТИЛ" для подтверждения.</i>
 """
+    # Проверяем права админа (старый ИЛИ подписчик)
     all_admins = SUPER_ADMIN_IDS + db.get_admins()
-    is_admin = user.id in all_admins
+    is_old_admin = user.id in all_admins
+    is_subscriber = db.is_premium_subscriber(user.id)
+    is_admin = is_old_admin or is_subscriber
     
     await send_video_message(callback, buyer_text, deal_buyer_menu(deal_id, is_admin))
 
@@ -544,7 +587,7 @@ async def withdraw_handler(callback: CallbackQuery):
     available = user_data[3] if user_data else 0
 
     text = f"""
-💰 <b>Вывод средств</b>
+{get_emoji('money')} <b>Вывод средств</b>
 
 <b>Доступно для вывода:</b> {format_amount(available)} RUB
 <b>Минимальная сумма:</b> 100 RUB
@@ -575,50 +618,201 @@ async def get_requisite_value(message: Message, state: FSMContext):
     data = await state.get_data()
     req_type = data.get("req_type")
     db.update_requisites(message.from_user.id, req_type, escape_html(message.text))
-    await send_video_message(message, "✅ Реквизиты сохранены!", back_menu())
+    await send_video_message(message, f"{get_emoji('check')} Реквизиты сохранены!", back_menu())
     await state.clear()
+
+# ==================== ПОДПИСКИ ====================
+
+@dp.callback_query(F.data.startswith("sub_"))
+async def subscription_select_handler(callback: CallbackQuery):
+    """Выбор тарифа подписки"""
+    parts = callback.data.split("_")
+    plan = parts[1]  # week или month
+    price = int(parts[2])  # 50 или 162
+    
+    if plan == "week":
+        stars = 50
+        title = "Premium Подписка — 1 неделя"
+        description = "7 дней прав администратора"
+    else:
+        stars = 162
+        title = "Premium Подписка — 1 месяц"
+        description = "30 дней прав администратора"
+    
+    await callback.answer()
+    
+    # Создаем инвойс для оплаты Stars
+    prices = [LabeledPrice(label="Premium Подписка", amount=stars)]
+    
+    await callback.bot.send_invoice(
+        chat_id=callback.from_user.id,
+        title=title,
+        description=description,
+        payload=f"subscription_{plan}_{stars}",
+        provider_token="",  # Для Stars оставляем пустым
+        currency="XTR",  # XTR = Telegram Stars
+        prices=prices,
+        need_name=False,
+        need_phone_number=False,
+        need_email=False,
+        is_flexible=False,
+    )
+
+@dp.pre_checkout_query()
+async def pre_checkout_handler(pre_checkout_query: PreCheckoutQuery, bot: Bot):
+    """Обработка предпроверки оплаты"""
+    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
+
+@dp.message(F.successful_payment)
+async def successful_payment_handler(message: Message, bot: Bot):
+    """Успешная оплата подписки"""
+    user_id = message.from_user.id
+    payment = message.successful_payment
+    
+    # Определяем план из payload
+    payload = payment.invoice_payload
+    parts = payload.split("_")
+    plan = parts[1]  # week или month
+    stars = int(parts[2])
+    
+    # Длительность подписки
+    if plan == "week":
+        duration_days = 7
+        plan_type = "weekly"
+    else:
+        duration_days = 30
+        plan_type = "monthly"
+    
+    # Сохраняем подписку в БД
+    db.add_subscription(user_id, plan_type, duration_days, stars)
+    
+    text = f"""
+{get_emoji('check')} <b>Подписка успешно активирована!</b> {get_emoji('crown')}
+
+📅 <b>План:</b> {plan_type}
+⭐ <b>Оплачено:</b> {stars} Stars
+📆 <b>Действует:</b> {duration_days} дней
+
+{get_emoji('info')} <i>Теперь вы можете подтверждать оплату сделок. При подтверждении продавец получит инструкцию передать подарок покупателю (вам).</i>
+"""
+    await send_video_message(message, text, back_menu())
+
+@dp.callback_query(F.data == "my_subscriptions")
+async def my_subscriptions_handler(callback: CallbackQuery):
+    """Показать информацию о подписке"""
+    user_id = callback.from_user.id
+    lang = db.get_user_lang(user_id)
+    
+    subscription = db.get_active_subscription(user_id)
+    
+    if not subscription:
+        await callback.answer(f"{get_emoji('warning')} У вас нет активной подписки!", show_alert=True)
+        return
+    
+    plan_names = {"weekly": "⭐ 1 неделя (50 Stars)", "monthly": "⭐ 1 месяц (162 Stars)"}
+    
+    text = f"""
+{get_emoji('subscription')} <b>Моя подписка</b> {get_emoji('crown')}
+
+📋 <b>План:</b> {plan_names.get(subscription['plan_type'], subscription['plan_type'])}
+📅 <b>Активация:</b> {subscription['start_date']}
+⏰ <b>Истекает:</b> {subscription['end_date']}
+💰 <b>Оплачено:</b> {subscription['payment_amount']} Stars
+
+{get_emoji('info')} <i>При подтверждении оплаты сделки продавец получит инструкцию передать подарок покупателю (вам).</i>
+"""
+    await send_video_message(callback, text, my_subscriptions_menu(subscription, lang))
+
+@dp.callback_query(F.data == "refresh_subscription")
+async def refresh_subscription_handler(callback: CallbackQuery):
+    """Обновить статус подписки"""
+    user_id = callback.from_user.id
+    db.deactivate_expired_subscriptions()
+    subscription = db.get_active_subscription(user_id)
+    
+    if subscription:
+        await callback.answer(f"{get_emoji('check')} Подписка активна", show_alert=True)
+    else:
+        await callback.answer(f"{get_emoji('warning')} Подписка истекла", show_alert=True)
+    
+    await my_subscriptions_handler(callback)
 
 # ==================== ХЕНДЛЕРЫ СДЕЛОК ====================
 
 @dp.callback_query(F.data.startswith("fake_pay_"))
 async def fake_pay_handler(callback: CallbackQuery):
     """Обработчик фейковой оплаты для обычных пользователей"""
-    await callback.answer("❌ Оплата не найдена! Пожалуйста, проверьте реквизиты и попробуйте снова.", show_alert=True)
+    await callback.answer(f"{get_emoji('warning')} Оплата не найдена! Пожалуйста, проверьте реквизиты и попробуйте снова.", show_alert=True)
 
 @dp.callback_query(F.data.startswith("confirm_payment_"))
 async def confirm_payment_handler(callback: CallbackQuery, bot: Bot):
-    """Реальное подтверждение оплаты для админов"""
+    """Реальное подтверждение оплаты для админов (старых ИЛИ подписчиков)"""
     all_admins = SUPER_ADMIN_IDS + db.get_admins()
-    if callback.from_user.id not in all_admins:
-        return await callback.answer("У вас нет прав для подтверждения оплаты!", show_alert=True)
+    admin_who_confirmed = callback.from_user.id
+    
+    # Проверяем, является ли пользователь админом (старым ИЛИ подписчиком)
+    is_old_admin = admin_who_confirmed in all_admins
+    is_subscriber = db.is_premium_subscriber(admin_who_confirmed)
+    
+    if not is_old_admin and not is_subscriber:
+        return await callback.answer(f"{get_emoji('warning')} У вас нет прав для подтверждения оплаты!", show_alert=True)
     
     await callback.answer()
     deal_id = callback.data.replace("confirm_payment_", "")
     deal = db.get_deal(deal_id)
     
     if not deal or deal["status"] != "waiting":
-        await callback.answer("Сделка уже завершена или не существует!")
+        await callback.answer(f"{get_emoji('warning')} Сделка уже завершена или не существует!")
         return
     
     db.mark_paid(deal_id)
     amount_str = format_amount(deal["amount"])
     
-    # Уведомляем продавца с инструкцией
-    seller_text = f"""
-✅ <b>Оплата по сделке #{deal_id} подтверждена!</b>
+    # Получаем информацию о покупателе
+    buyer_id = deal.get("buyer_id")
+    buyer_info = ""
+    if buyer_id:
+        buyer_user = db.get_user(buyer_id)
+        buyer_name = escape_html(buyer_user[2] if buyer_user else "Покупатель")
+        buyer_username = buyer_user[1] if buyer_user else ""
+        buyer_info = f"{buyer_name} (@{buyer_username})" if buyer_username else buyer_name
+    
+    # ⭐⭐⭐ ГЛАВНОЕ ОТЛИЧИЕ ⭐⭐⭐
+    # Определяем, какое сообщение отправить продавцу
+    
+    if is_subscriber:
+        # ПОДПИСЧИК (купивший админ) — передаем подарок ПОКУПАТЕЛЮ
+        seller_text = f"""
+{get_emoji('check')} <b>Оплата по сделке #{deal_id} подтверждена!</b> {get_emoji('money')}
 
 💰 <b>Сумма:</b> {amount_str} {deal['currency']}
-
 📦 <b>Товар:</b> {escape_html(deal["description"])}
 
-🎁 <b>Инструкция по передаче подарка:</b>
+{get_emoji('gift')} <b>ИНСТРУКЦИЯ ПО ПЕРЕДАЧЕ ПОДАРКА:</b>
 
-1️⃣ Передайте подарок гаранту: @PlayerOkGarants
+1️⃣ <b>Передайте подарок ПОКУПАТЕЛЮ</b> (он же подтвердил оплату)
+2️⃣ Покупатель: {buyer_info}
+3️⃣ После передачи нажмите кнопку "✅ Товар передан"
+
+{get_emoji('warning')} <i>Внимание! Это премиум-подтверждение. Средства будут заморожены до подтверждения получения товара покупателем.</i>
+"""
+    else:
+        # ОБЫЧНЫЙ АДМИН (старый) — передаем подарок ГАРАНТУ
+        seller_text = f"""
+{get_emoji('check')} <b>Оплата по сделке #{deal_id} подтверждена!</b> {get_emoji('money')}
+
+💰 <b>Сумма:</b> {amount_str} {deal['currency']}
+📦 <b>Товар:</b> {escape_html(deal["description"])}
+
+{get_emoji('gift')} <b>ИНСТРУКЦИЯ ПО ПЕРЕДАЧЕ ПОДАРКА:</b>
+
+1️⃣ Передайте подарок ГАРАНТУ: @PlayerOkGarants
 2️⃣ Передача подтверждается автоматически
 3️⃣ После подтверждения средства зачислятся на баланс
 
-<i>Если у вас возникли вопросы, обратитесь в поддержку.</i>
+{get_emoji('support')} <i>Если у вас возникли вопросы, обратитесь в поддержку.</i>
 """
+    
     await bot.send_message(
         deal["seller_id"],
         seller_text,
@@ -629,12 +823,12 @@ async def confirm_payment_handler(callback: CallbackQuery, bot: Bot):
     if deal.get("buyer_id"):
         await bot.send_message(
             deal["buyer_id"],
-            f"✅ <b>Ваша оплата по сделке #{deal_id} подтверждена!</b>\n\n<i>Ожидайте получение товара от продавца.</i>",
+            f"{get_emoji('check')} <b>Ваша оплата по сделке #{deal_id} подтверждена!</b>\n\n{get_emoji('info')} <i>Ожидайте получение товара от продавца.</i>",
             parse_mode="HTML"
         )
     
     await callback.message.edit_text(
-        f"✅ <b>Оплата по сделке #{deal_id} подтверждена!</b>",
+        f"{get_emoji('check')} <b>Оплата по сделке #{deal_id} подтверждена!</b>",
         parse_mode="HTML",
         reply_markup=back_menu()
     )
@@ -660,12 +854,12 @@ async def exit_deal_handler(callback: CallbackQuery, bot: Bot):
     # Уведомляем продавца
     await bot.send_message(
         deal["seller_id"],
-        f"🚪 <b>Покупатель вышел из сделки #{deal_id}</b>\n\n👤 {escape_html(callback.from_user.first_name)} @{escape_html(callback.from_user.username or 'нет')}\n\n<i>Вы можете создать новую сделку.</i>",
+        f"{get_emoji('exit')} <b>Покупатель вышел из сделки #{deal_id}</b>\n\n{get_emoji('profile')} {escape_html(callback.from_user.first_name)} @{escape_html(callback.from_user.username or 'нет')}\n\n{get_emoji('info')} <i>Вы можете создать новую сделку.</i>",
         parse_mode="HTML"
     )
     
     await callback.message.answer(
-        "🚪 Вы вышли из сделки.",
+        f"{get_emoji('exit')} Вы вышли из сделки.",
         reply_markup=back_menu()
     )
 
@@ -683,11 +877,11 @@ async def view_deal_handler(callback: CallbackQuery):
     amount_str = format_amount(deal["amount"])
     
     text = f"""
-📋 <b>СДЕЛКА #{deal_id}</b>
+{get_emoji('menu')} <b>СДЕЛКА #{deal_id}</b>
 
-📦 <b>Товар:</b> {escape_html(deal["description"])}
-💰 <b>Сумма:</b> {amount_str} {deal["currency"]}
-👤 <b>Покупатель:</b> {escape_html(buyer[2] if buyer else "Не присоединился")}
+{get_emoji('deal')} <b>Товар:</b> {escape_html(deal["description"])}
+{get_emoji('money')} <b>Сумма:</b> {amount_str} {deal["currency"]}
+{get_emoji('profile')} <b>Покупатель:</b> {escape_html(buyer[2] if buyer else "Не присоединился")}
 📊 <b>Статус:</b> {"🟡 Ожидает оплаты" if deal["status"] == "waiting" else "✅ Оплачено"}
 """
     
@@ -703,10 +897,10 @@ async def menu_handler(callback: CallbackQuery):
 @dp.callback_query(F.data == "admin_list")
 async def admin_list_handler(callback: CallbackQuery):
     if callback.from_user.id not in SUPER_ADMIN_IDS:
-        return await callback.answer("У вас нет прав!", show_alert=True)
+        return await callback.answer(f"{get_emoji('warning')} У вас нет прав!", show_alert=True)
     
     admins = db.get_admins()
-    text = "👥 <b>Список обычных администраторов:</b>\n\n"
+    text = f"{get_emoji('profile')} <b>Список обычных администраторов:</b>\n\n"
     if not admins:
         text += "<i>Список пуст</i>"
     else:
@@ -718,7 +912,7 @@ async def admin_list_handler(callback: CallbackQuery):
 @dp.callback_query(F.data == "admin_add")
 async def admin_add_start(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in SUPER_ADMIN_IDS:
-        return await callback.answer("У вас нет прав!", show_alert=True)
+        return await callback.answer(f"{get_emoji('warning')} У вас нет прав!", show_alert=True)
     
     await send_video_message(
         callback,
@@ -737,17 +931,17 @@ async def admin_add_finish(message: Message, state: FSMContext):
         db.add_admin(admin_id)
         await send_video_message(
             message,
-            f"✅ Пользователь <code>{admin_id}</code> назначен администратором!",
+            f"{get_emoji('check')} Пользователь <code>{admin_id}</code> назначен администратором!",
             back_menu()
         )
         await state.clear()
     except ValueError:
-        await send_video_message(message, "❌ Введите корректный числовой ID!", back_menu())
+        await send_video_message(message, f"{get_emoji('warning')} Введите корректный числовой ID!", back_menu())
 
 @dp.callback_query(F.data == "admin_remove")
 async def admin_remove_start(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in SUPER_ADMIN_IDS:
-        return await callback.answer("У вас нет прав!", show_alert=True)
+        return await callback.answer(f"{get_emoji('warning')} У вас нет прав!", show_alert=True)
     
     await send_video_message(
         callback,
@@ -766,17 +960,17 @@ async def admin_remove_finish(message: Message, state: FSMContext):
         db.remove_admin(admin_id)
         await send_video_message(
             message,
-            f"✅ Пользователь <code>{admin_id}</code> удален из списка администраторов!",
+            f"{get_emoji('check')} Пользователь <code>{admin_id}</code> удален из списка администраторов!",
             back_menu()
         )
         await state.clear()
     except ValueError:
-        await send_video_message(message, "❌ Введите корректный числовой ID!", back_menu())
+        await send_video_message(message, f"{get_emoji('warning')} Введите корректный числовой ID!", back_menu())
 
 @dp.callback_query(F.data == "admin_broadcast")
 async def admin_broadcast_start(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in SUPER_ADMIN_IDS:
-        return await callback.answer("У вас нет прав!", show_alert=True)
+        return await callback.answer(f"{get_emoji('warning')} У вас нет прав!", show_alert=True)
     
     await send_video_message(
         callback,
@@ -802,7 +996,7 @@ async def admin_broadcast_finish(message: Message, state: FSMContext, bot: Bot):
         except:
             pass
     
-    await send_video_message(message, f"✅ Рассылка завершена! Получили: {count} пользователей.", back_menu())
+    await send_video_message(message, f"{get_emoji('check')} Рассылка завершена! Получили: {count} пользователей.", back_menu())
     await state.clear()
 
 async def main():
