@@ -152,6 +152,33 @@ def deal_buyer_menu(deal_id: str, is_admin: bool = False) -> InlineKeyboardMarku
         InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
     )
     return builder.as_markup()
+# ========== ПОДПИСКИ ==========
+
+def subscription_menu(lang: str = 'ru') -> InlineKeyboardMarkup:
+    """Меню выбора подписки"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="⭐ 50 Stars — 1 неделя", callback_data="sub_week_50")
+    )
+    builder.row(
+        InlineKeyboardButton(text="⭐ 162 Stars — 1 месяц", callback_data="sub_month_162")
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
+    )
+    return builder.as_markup()
+
+
+def my_subscriptions_menu(user_sub: dict, lang: str = 'ru') -> InlineKeyboardMarkup:
+    """Меню с информацией о подписке"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="🔄 Обновить статус", callback_data="refresh_subscription")
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Назад в меню", callback_data="menu")
+    )
+    return builder.as_markup()
 
 
 def deal_seller_menu(deal_id: str) -> InlineKeyboardMarkup:
