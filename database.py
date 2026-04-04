@@ -223,5 +223,91 @@ class Database:
         cursor.execute("SELECT secret_code FROM deals WHERE deal_id = ?", (deal_id,))
         row = cursor.fetchone()
         return row[0] if row else None
+        # ========== ПОДПИСКИ ==========
+    
+    def create_subscriptions_table(self):
+        """Создает таблицу для подписок (вызови в _init_db)"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER UNIQUE,
+                plan_type TEXT,
+                start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                end_date TIMESTAMP,
+                is_active INTEGER DEFAULT 1,
+                payment_amount INTEGER,
+                payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        self.conn.commit()
+    
+    def add_subscription(self, user_id: int, plan_type: str, duration_days: int, payment_amount: int):
+        """Добавляет или обновляет подписку пользователя"""
+        from datetime import datetime, timedelta
+        
+        with self._lock:
+            cursor = self.conn.cursor()
+            end_date = datetime.now() + timedelta(days=duration_days)
+            
+            # Удаляем старую подписку, если есть
+            cursor.execute("DELETE FROM user_subscriptions WHERE user_id = ?", (user_id,))
+            
+            # Добавляем новую
+            cursor.execute("""
+                INSERT INTO user_subscriptions (user_id, plan_type, end_date, payment_amount, is_active)
+                VALUES (?, ?, ?, ?, 1)
+            """, (user_id, plan_type, end_date.isoformat(), payment_amount))
+            self.conn.commit()
+    
+    def get_active_subscription(self, user_id: int) -> Optional[Dict]:
+        """Возвращает активную подписку пользователя, если есть"""
+        from datetime import datetime
+        
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT user_id, plan_type, start_date, end_date, payment_amount, is_active
+            FROM user_subscriptions 
+            WHERE user_id = ? AND is_active = 1 AND end_date > datetime('now')
+            ORDER BY end_date DESC LIMIT 1
+        """, (user_id,))
+        row = cursor.fetchone()
+        
+        if row:
+            return {
+                "user_id": row[0],
+                "plan_type": row[1],
+                "start_date": row[2],
+                "end_date": row[3],
+                "payment_amount": row[4],
+                "is_active": row[5]
+            }
+        return None
+    
+    def is_premium_subscriber(self, user_id: int) -> bool:
+        """Проверяет, является ли пользователь активным подписчиком"""
+        return self.get_active_subscription(user_id) is not None
+    
+    def deactivate_expired_subscriptions(self):
+        """Деактивирует истекшие подписки"""
+        from datetime import datetime
+        
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                UPDATE user_subscriptions 
+                SET is_active = 0 
+                WHERE is_active = 1 AND end_date <= datetime('now')
+            """)
+            self.conn.commit()
+    
+    def get_all_active_subscribers(self) -> list:
+        """Возвращает список ID всех активных подписчиков"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT user_id FROM user_subscriptions 
+            WHERE is_active = 1 AND end_date > datetime('now')
+        """)
+        return [row[0] for row in cursor.fetchall()]
 
 db = Database()
