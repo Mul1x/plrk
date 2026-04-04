@@ -631,7 +631,7 @@ async def subscription_select_handler(callback: CallbackQuery):
     price = int(parts[2])  # 50 или 162
     
     if plan == "week":
-        stars = 50
+        stars = 1
         title = "Premium Подписка — 1 неделя"
         description = "7 дней прав администратора"
     else:
