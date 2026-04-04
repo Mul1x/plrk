@@ -1,7 +1,7 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-def main_menu(is_super_admin: bool = False, lang: str = 'ru') -> InlineKeyboardMarkup:
+def main_menu(is_super_admin: bool = False, lang: str = 'ru', has_subscription: bool = False) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     from utils import t
 
