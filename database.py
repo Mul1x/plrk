@@ -28,6 +28,7 @@ class Database:
                 secret_code TEXT
             )
         """)
+        self.create_subscriptions_table() 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
