@@ -28,6 +28,11 @@ def main_menu(is_super_admin: bool = False, lang: str = 'ru', has_subscription: 
     builder.row(
         InlineKeyboardButton(text="🌐 Language", callback_data="lang_menu")
     )
+
+    if has_subscription:
+        builder.row(
+            InlineKeyboardButton(text="💎 Мои подписки", callback_data="my_subscriptions")
+        )
     
     # Админ панель - только для админов
     if is_super_admin:
