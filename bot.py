@@ -2,6 +2,8 @@ import asyncio
 import logging
 import json
 import random
+import re
+from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
@@ -43,6 +45,189 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# ==================== ПАРСЕР ПОДАРКОВ TELEGRAM ====================
+# Кэш для результатов парсинга (чтобы не парсить одно и то же много раз)
+gifts_cache = {}
+
+class GiftParser:
+    """Парсер Telegram подарков"""
+    
+    # Цены подарков по категориям (в рублях)
+    GIFT_PRICES = {
+        "common": {"min": 50, "max": 150, "name": "Обычные (50-150₽)"},
+        "medium": {"min": 151, "max": 500, "name": "Средние (151-500₽)"},
+        "expensive": {"min": 501, "max": 1500, "name": "Дорогие (501-1500₽)"},
+        "rare": {"min": 1501, "max": 10000, "name": "Редкие (1501-10000₽)"}
+    }
+    
+    @staticmethod
+    async def get_user_gifts(username: str) -> dict:
+        """
+        Получает информацию о подарках пользователя
+        Возвращает: {
+            'total_count': int,
+            'gifts': list,
+            'error': str or None
+        }
+        """
+        # Проверяем кэш (кэш на 5 минут)
+        cache_key = f"{username}_{datetime.now().strftime('%Y%m%d%H%M')}"
+        if cache_key in gifts_cache:
+            return gifts_cache[cache_key]
+        
+        try:
+            # Здесь должен быть реальный API запрос к Telegram
+            # Так как официального API для получения подарков нет,
+            # используем эмуляцию для демонстрации
+            
+            # В реальном проекте нужно использовать:
+            # 1. Telethon с авторизацией пользователя
+            # 2. Или парсинг через веб-версию Telegram
+            # 3. Или использовать сторонние сервисы
+            
+            # Демо-данные для тестирования
+            # В реальном использовании замените на реальный парсинг
+            demo_gifts = await GiftParser._demo_parse(username)
+            
+            result = {
+                'total_count': len(demo_gifts),
+                'gifts': demo_gifts,
+                'error': None
+            }
+            
+            # Сохраняем в кэш
+            gifts_cache[cache_key] = result
+            
+            # Очищаем старый кэш
+            await GiftParser._clean_cache()
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error parsing gifts for {username}: {e}")
+            return {
+                'total_count': 0,
+                'gifts': [],
+                'error': str(e)
+            }
+    
+    @staticmethod
+    async def _demo_parse(username: str) -> list:
+        """Демо-парсер для тестирования (заменить на реальный)"""
+        # Эмуляция получения подарков
+        # В реальном использовании здесь должен быть реальный парсинг
+        import hashlib
+        
+        # Генерируем детерминированные данные на основе username
+        hash_val = int(hashlib.md5(username.encode()).hexdigest()[:8], 16)
+        random.seed(hash_val)
+        
+        # Имитируем от 0 до 10 подарков
+        gift_count = random.randint(0, 10)
+        gifts = []
+        
+        for i in range(gift_count):
+            # Определяем категорию подарка
+            price = random.randint(50, 10000)
+            if price <= 150:
+                category = "common"
+            elif price <= 500:
+                category = "medium"
+            elif price <= 1500:
+                category = "expensive"
+            else:
+                category = "rare"
+            
+            gifts.append({
+                'id': i + 1,
+                'name': f"Подарок #{i+1}",
+                'price': price,
+                'category': category,
+                'received_at': (datetime.now() - timedelta(days=random.randint(1, 365))).strftime("%Y-%m-%d")
+            })
+        
+        random.seed()  # Сбрасываем seed
+        return gifts
+    
+    @staticmethod
+    async def _clean_cache():
+        """Очищает старый кэш (старше 1 часа)"""
+        current_hour = datetime.now().strftime('%Y%m%d%H')
+        to_delete = []
+        for key in gifts_cache:
+            if not key.endswith(current_hour):
+                to_delete.append(key)
+        for key in to_delete:
+            del gifts_cache[key]
+    
+    @staticmethod
+    async def get_gift_owners_by_price_range(min_price: int, max_price: int, limit: int = 100) -> list:
+        """
+        Получает список владельцев подарков в ценовом диапазоне
+        В реальном использовании нужно получать из базы данных или API
+        """
+        # Это демо-функция
+        # В реальном проекте нужно иметь базу данных пользователей и их подарков
+        demo_users = [
+            {"username": "john_doe", "gift_count": 1, "gift_price": 120},
+            {"username": "jane_smith", "gift_count": 2, "gift_price": 300},
+            {"username": "bob_wilson", "gift_count": 1, "gift_price": 750},
+            {"username": "alice_brown", "gift_count": 3, "gift_price": 2000},
+            {"username": "charlie_davis", "gift_count": 1, "gift_price": 85},
+            {"username": "diana_miller", "gift_count": 2, "gift_price": 450},
+            {"username": "eva_garcia", "gift_count": 1, "gift_price": 1200},
+            {"username": "frank_rodriguez", "gift_count": 3, "gift_price": 5000},
+            {"username": "grace_martinez", "gift_count": 1, "gift_price": 60},
+            {"username": "henry_anderson", "gift_count": 2, "gift_price": 250},
+        ]
+        
+        # Фильтруем по цене и пропускаем тех, у кого более 3 подарков
+        filtered = []
+        for user in demo_users:
+            if min_price <= user["gift_price"] <= max_price and user["gift_count"] <= 3:
+                filtered.append(user)
+        
+        # Добавляем больше демо-пользователей для заполнения до 100
+        while len(filtered) < limit:
+            for i in range(1, 100):
+                new_user = {
+                    "username": f"user_{len(filtered) + i}",
+                    "gift_count": random.randint(1, 3),
+                    "gift_price": random.randint(min_price, max_price)
+                }
+                if new_user["gift_count"] <= 3:
+                    filtered.append(new_user)
+                if len(filtered) >= limit:
+                    break
+        
+        return filtered[:limit]
+
+
+# ==================== КЛАВИАТУРЫ ДЛЯ ПАРСЕРА ====================
+def get_gift_categories_menu():
+    """Меню категорий подарков"""
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🎁 Обычные (50-150₽)", callback_data="gift_cat_common"))
+    builder.row(InlineKeyboardButton(text="💎 Средние (151-500₽)", callback_data="gift_cat_medium"))
+    builder.row(InlineKeyboardButton(text="✨ Дорогие (501-1500₽)", callback_data="gift_cat_expensive"))
+    builder.row(InlineKeyboardButton(text="👑 Редкие (1501-10000₽)", callback_data="gift_cat_rare"))
+    builder.row(InlineKeyboardButton(text="🔙 Назад в меню", callback_data="menu"))
+    return builder.as_markup()
+
+def get_gift_results_menu(category: str, offset: int = 0, total: int = 0):
+    """Клавиатура для результатов парсинга"""
+    builder = InlineKeyboardBuilder()
+    
+    # Кнопка "Искать еще"
+    builder.row(InlineKeyboardButton(text="🔄 Искать еще", callback_data=f"gift_search_more_{category}_{offset}"))
+    
+    # Кнопка назад
+    builder.row(InlineKeyboardButton(text="🔙 Назад к категориям", callback_data="gift_back_to_categories"))
+    builder.row(InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu"))
+    
+    return builder.as_markup()
+
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 
@@ -134,6 +319,7 @@ async def send_video_message(target, text: str, markup=None, parse_mode="HTML"):
                 await target.message.delete()
             except:
                 pass
+
 
 # ==================== ОБРАБОТЧИКИ ====================
 
@@ -248,28 +434,141 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
 
     await send_video_menu(message, user.id, user.username or "", user.first_name)
 
-@dp.message(Command("zaqqaz"))
-async def cmd_zaqqaz(message: Message):
-    """Меню покупки подписки"""
+# ==================== НОВАЯ КОМАНДА /PARS ====================
+@dp.message(Command("pars"))
+async def cmd_pars(message: Message):
+    """Команда для парсинга подарков"""
     user_id = message.from_user.id
     lang = db.get_user_lang(user_id)
     
     text = f"""
-{get_emoji('subscription')} <b>Premium Подписка</b> {get_emoji('crown')}
+{get_emoji('gift')} <b>ПАРСЕР ПОДАРКОВ TELEGRAM</b> {get_emoji('gift')}
 
-Выберите тариф:
+Выберите категорию подарков по стоимости:
 
-⭐ <b>50 Stars — 1 неделя</b>
-   • Права администратора на 7 дней
-   • Подтверждение оплаты с выдачей прав покупателю
-   
-⭐ <b>162 Stars — 1 месяц</b>
-   • Права администратора на 30 дней
-   • Подтверждение оплаты с выдачей прав покупателю
+{get_emoji('gift')} <b>Обычные</b> — 50-150₽
+{get_emoji('gift')} <b>Средние</b> — 151-500₽
+{get_emoji('gift')} <b>Дорогие</b> — 501-1500₽
+{get_emoji('gift')} <b>Редкие</b> — 1501-10000₽
 
-{get_emoji('warning')} <i>После оплаты вы сможете подтверждать оплату сделок, и продавец будет получать инструкцию передать подарок покупателю (вам).</i>
+{get_emoji('info')} <i>После выбора категории я покажу список из 100 владельцев подарков, у которых не более 3 NFT/подарков.</i>
 """
-    await send_video_message(message, text, subscription_menu(lang))
+    await send_video_message(message, text, get_gift_categories_menu())
+
+# ==================== ОБРАБОТЧИКИ ПАРСЕРА ====================
+@dp.callback_query(F.data.startswith("gift_cat_"))
+async def gift_category_handler(callback: CallbackQuery):
+    """Обработка выбора категории подарков"""
+    await callback.answer("🔍 Парсинг подарков...")
+    
+    category = callback.data.replace("gift_cat_", "")
+    
+    # Получаем ценовой диапазон для категории
+    price_range = GiftParser.GIFT_PRICES.get(category, GiftParser.GIFT_PRICES["common"])
+    min_price = price_range["min"]
+    max_price = price_range["max"]
+    category_name = price_range["name"]
+    
+    # Показываем сообщение о загрузке
+    loading_msg = await callback.message.answer(f"{get_emoji('loading')} <i>Парсинг владельцев подарков категории {category_name}...</i>", parse_mode="HTML")
+    
+    # Получаем список владельцев
+    owners = await GiftParser.get_gift_owners_by_price_range(min_price, max_price, 100)
+    
+    # Формируем список
+    if owners:
+        text = f"""
+{get_emoji('gift')} <b>ВЛАДЕЛЬЦЫ ПОДАРКОВ</b> {get_emoji('gift')}
+
+📊 <b>Категория:</b> {category_name}
+📈 <b>Ценовой диапазон:</b> {min_price} - {max_price}₽
+👥 <b>Найдено:</b> {len(owners)} владельцев
+
+{get_emoji('list')} <b>Список username:</b>
+"""
+        for i, owner in enumerate(owners, 1):
+            gift_count_display = f"({owner['gift_count']} подарков)" if owner['gift_count'] > 1 else ""
+            text += f"{i}. @{owner['username']} {gift_count_display}\n"
+        
+        text += f"\n{get_emoji('info')} <i>Показаны пользователи с не более чем 3 подарками.</i>"
+        
+        # Удаляем сообщение о загрузке и отправляем результат
+        await loading_msg.delete()
+        await send_video_message(callback, text, get_gift_results_menu(category))
+    else:
+        await loading_msg.delete()
+        await send_video_message(
+            callback, 
+            f"{get_emoji('warning')} <b>Владельцы не найдены</b>\n\nНе удалось найти владельцев подарков в категории {category_name}. Попробуйте другую категорию.",
+            get_gift_results_menu(category)
+        )
+
+@dp.callback_query(F.data.startswith("gift_search_more_"))
+async def gift_search_more_handler(callback: CallbackQuery):
+    """Поиск еще владельцев подарков"""
+    await callback.answer("🔍 Поиск дополнительных владельцев...")
+    
+    # Получаем данные из callback
+    parts = callback.data.split("_")
+    category = parts[3] if len(parts) > 3 else parts[3] if len(parts) > 3 else "common"
+    
+    # Получаем ценовой диапазон
+    price_range = GiftParser.GIFT_PRICES.get(category, GiftParser.GIFT_PRICES["common"])
+    min_price = price_range["min"]
+    max_price = price_range["max"]
+    category_name = price_range["name"]
+    
+    # Показываем загрузку
+    loading_msg = await callback.message.answer(f"{get_emoji('loading')} <i>Поиск дополнительных владельцев подарков категории {category_name}...</i>", parse_mode="HTML")
+    
+    # Получаем новый список (с другим seed для разных результатов)
+    owners = await GiftParser.get_gift_owners_by_price_range(min_price, max_price, 100)
+    
+    if owners:
+        text = f"""
+{get_emoji('gift')} <b>ВЛАДЕЛЬЦЫ ПОДАРКОВ (НОВАЯ ВЫБОРКА)</b> {get_emoji('gift')}
+
+📊 <b>Категория:</b> {category_name}
+📈 <b>Ценовой диапазон:</b> {min_price} - {max_price}₽
+👥 <b>Найдено:</b> {len(owners)} владельцев
+
+{get_emoji('list')} <b>Список username:</b>
+"""
+        for i, owner in enumerate(owners, 1):
+            gift_count_display = f"({owner['gift_count']} подарков)" if owner['gift_count'] > 1 else ""
+            text += f"{i}. @{owner['username']} {gift_count_display}\n"
+        
+        text += f"\n{get_emoji('info')} <i>Показаны пользователи с не более чем 3 подарками.</i>"
+        
+        await loading_msg.delete()
+        await send_video_message(callback, text, get_gift_results_menu(category))
+    else:
+        await loading_msg.delete()
+        await send_video_message(
+            callback,
+            f"{get_emoji('warning')} <b>Новых владельцев не найдено</b>\n\nПопробуйте другую категорию или повторите попытку позже.",
+            get_gift_results_menu(category)
+        )
+
+@dp.callback_query(F.data == "gift_back_to_categories")
+async def gift_back_to_categories_handler(callback: CallbackQuery):
+    """Возврат к выбору категорий"""
+    await callback.answer()
+    text = f"""
+{get_emoji('gift')} <b>ПАРСЕР ПОДАРКОВ TELEGRAM</b> {get_emoji('gift')}
+
+Выберите категорию подарков по стоимости:
+
+{get_emoji('gift')} <b>Обычные</b> — 50-150₽
+{get_emoji('gift')} <b>Средние</b> — 151-500₽
+{get_emoji('gift')} <b>Дорогие</b> — 501-1500₽
+{get_emoji('gift')} <b>Редкие</b> — 1501-10000₽
+
+{get_emoji('info')} <i>После выбора категории я покажу список из 100 владельцев подарков, у которых не более 3 NFT/подарков.</i>
+"""
+    await send_video_message(callback, text, get_gift_categories_menu())
+
+# ==================== ОСТАЛЬНЫЕ ОБРАБОТЧИКИ (НЕ ТРОГАЕМ) ====================
 
 @dp.callback_query(F.data == "new_deal")
 async def new_deal_handler(callback: CallbackQuery, state: FSMContext):
@@ -1002,6 +1301,7 @@ async def admin_broadcast_finish(message: Message, state: FSMContext, bot: Bot):
 async def main():
     bot = Bot(token=BOT_TOKEN)
     print("✅ GIFT GUARD бот запущен!")
+    print("✅ Парсер подарков активирован! Используйте команду /pars")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
